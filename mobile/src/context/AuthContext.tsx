@@ -62,6 +62,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    const handler = (e: Event) => {
+      const { accessToken: at } = (e as CustomEvent).detail;
+      persistTokens(at, (e as CustomEvent).detail.refreshToken);
+      setState((s) => ({ ...s, accessToken: at }));
+    };
+    window.addEventListener('aurafit:token-refreshed', handler);
+    return () => window.removeEventListener('aurafit:token-refreshed', handler);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function restore() {

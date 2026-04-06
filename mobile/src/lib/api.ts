@@ -121,17 +121,63 @@ export async function apiGetMe(
   return res.json();
 }
 
+const TOKEN_KEY = 'aurafit_m_access_token';
+const REFRESH_KEY = 'aurafit_m_refresh_token';
+
+let refreshPromise: Promise<string> | null = null;
+
+async function silentRefresh(): Promise<string> {
+  const rt = localStorage.getItem(REFRESH_KEY);
+  if (!rt) throw new Error('No refresh token');
+
+  const res = await fetch(`${API_URL}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: rt }),
+  });
+  if (!res.ok) throw new Error('Refresh failed');
+
+  const data: RefreshResponse = await res.json();
+  localStorage.setItem(TOKEN_KEY, data.access_token);
+  localStorage.setItem(REFRESH_KEY, data.refresh_token);
+  window.dispatchEvent(
+    new CustomEvent('aurafit:token-refreshed', {
+      detail: { accessToken: data.access_token, refreshToken: data.refresh_token },
+    }),
+  );
+  return data.access_token;
+}
+
 export async function apiFetch(
   path: string,
   accessToken: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...options.headers,
-    },
-  });
+  const doFetch = (token: string) =>
+    fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
+
+  const res = await doFetch(accessToken);
+
+  if (res.status === 401) {
+    if (!refreshPromise) {
+      refreshPromise = silentRefresh().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    try {
+      const newToken = await refreshPromise;
+      return doFetch(newToken);
+    } catch {
+      /* refresh failed — return original 401 */
+    }
+  }
+
+  return res;
 }

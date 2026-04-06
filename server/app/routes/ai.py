@@ -17,7 +17,7 @@ def _latest_metrics(user_id: str, tenant_id: int) -> dict:
         .maybe_single()
         .execute()
     )
-    return row.data or {}
+    return row.data if row and row.data else {}
 
 
 def _active_goal(user_id: str, tenant_id: int) -> str | None:
@@ -32,7 +32,7 @@ def _active_goal(user_id: str, tenant_id: int) -> str | None:
         .maybe_single()
         .execute()
     )
-    return row.data["goal_type"] if row.data else None
+    return row.data["goal_type"] if row and row.data else None
 
 
 # ---------------------------------------------------------------------------
