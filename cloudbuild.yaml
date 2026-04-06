@@ -2,12 +2,11 @@
 #
 # Required substitutions (set via trigger or --substitutions):
 #   _REGION              e.g. us-central1
+#   _SERVER_URL          e.g. https://aurafit-server-746427091131.us-central1.run.app
+#   _WEB_PORTAL_URL      e.g. https://aurafit-web-portal-746427091131.us-central1.run.app
+#   _MOBILE_URL          e.g. https://aurafit-mobile-746427091131.us-central1.run.app
 #   _SUPABASE_URL        your Supabase project URL
 #   _SUPABASE_ANON_KEY   your Supabase anon/public key
-#
-# Required secrets (set in Cloud Run environment variables):
-#   SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, SECRET_KEY,
-#   GEMINI_API_KEY, SENDGRID_API_KEY
 
 steps:
   # ── 1. Build server image ──────────────────────────────
@@ -29,7 +28,7 @@ steps:
       - "-t"
       - "${_REGION}-docker.pkg.dev/$PROJECT_ID/aurafit/aurafit-web-portal:latest"
       - "--build-arg"
-      - "VITE_API_URL=https://aurafit-server-${_REGION}-$PROJECT_ID.a.run.app"
+      - "VITE_API_URL=${_SERVER_URL}"
       - "--build-arg"
       - "VITE_SUPABASE_URL=${_SUPABASE_URL}"
       - "--build-arg"
@@ -45,7 +44,7 @@ steps:
       - "-t"
       - "${_REGION}-docker.pkg.dev/$PROJECT_ID/aurafit/aurafit-mobile:latest"
       - "--build-arg"
-      - "VITE_API_URL=https://aurafit-server-${_REGION}-$PROJECT_ID.a.run.app"
+      - "VITE_API_URL=${_SERVER_URL}"
       - "--build-arg"
       - "VITE_SUPABASE_URL=${_SUPABASE_URL}"
       - "--build-arg"
@@ -90,7 +89,7 @@ steps:
       - "--max-instances"
       - "5"
       - "--set-env-vars"
-      - "FLASK_DEBUG=0"
+      - "FLASK_DEBUG=0,CORS_ORIGINS=${_WEB_PORTAL_URL},${_MOBILE_URL}"
 
   # ── 6. Deploy web-portal to Cloud Run ──────────────────
   - name: "gcr.io/cloud-builders/gcloud"

@@ -15,15 +15,17 @@ def create_app() -> Flask:
     )
     app.config["SUPABASE_JWT_SECRET"] = os.environ.get("SUPABASE_JWT_SECRET", "")
 
-    CORS(
-        app,
-        origins=[
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:3001",
-        ],
-    )
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ]
+    extra = os.environ.get("CORS_ORIGINS", "")
+    if extra:
+        allowed_origins.extend([o.strip() for o in extra.split(",") if o.strip()])
+
+    CORS(app, origins=allowed_origins)
 
     from app.auth import bp as auth_bp
     from app.routes import register_routes
