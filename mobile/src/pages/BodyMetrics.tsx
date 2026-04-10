@@ -1,15 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../lib/api';
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from 'recharts';
+  apiFetch,
+  apiFetchJson,
+  getApiCache,
+  invalidateApiCache,
+} from '../lib/api';
+
+const BodyMetricsChart = lazy(() => import('../components/charts/BodyMetricsChart'));
 
 interface Metric {
   id: number;
@@ -31,8 +29,20 @@ export default function BodyMetrics() {
 
   function fetchMetrics() {
     if (!accessToken) return;
-    apiFetch('/api/body-metrics', accessToken)
-      .then((r) => r.json())
+    const cached = getApiCache<{ body_metrics?: Metric[] }>(
+      '/api/body-metrics',
+      accessToken,
+      45000,
+    );
+    if (cached) {
+      setMetrics(cached.data.body_metrics ?? []);
+      setLoading(false);
+    }
+
+    apiFetchJson<{ body_metrics?: Metric[] }>('/api/body-metrics', accessToken, {
+      forceRefresh: true,
+      retries: 1,
+    })
       .then((d) => setMetrics(d.body_metrics ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -60,6 +70,7 @@ export default function BodyMetrics() {
     setBodyFat('');
     setSaving(false);
     setShowForm(false);
+    invalidateApiCache('/api/body-metrics', accessToken);
     fetchMetrics();
   }
 
@@ -107,23 +118,18 @@ export default function BodyMetrics() {
       {chartData.length > 1 && (
         <section className="section">
           <h2>Weight Trend</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="date" stroke="#64748b" fontSize={11} />
-              <YAxis stroke="#64748b" fontSize={11} domain={['auto', 'auto']} />
-              <Tooltip
-                contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: '#94a3b8' }}
-              />
-              <Line type="monotone" dataKey="weight" stroke="#6c63ff" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<div className="skeleton-chart" />}>
+            <BodyMetricsChart data={chartData} />
+          </Suspense>
         </section>
       )}
 
       {loading ? (
-        <p className="empty-text">Loading&hellip;</p>
+        <section className="section">
+          <div className="skeleton-line skeleton-line--lg" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+        </section>
       ) : metrics.length === 0 ? (
         <section className="section"><p className="empty-text">No metrics logged yet.</p></section>
       ) : (

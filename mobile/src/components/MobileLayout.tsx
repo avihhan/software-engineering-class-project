@@ -1,6 +1,18 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+const routePreloaders: Record<string, () => Promise<unknown>> = {
+  '/dashboard': () => import('../pages/Dashboard'),
+  '/workouts': () => import('../pages/Workouts'),
+  '/nutrition': () => import('../pages/Nutrition'),
+  '/body-metrics': () => import('../pages/BodyMetrics'),
+  '/goals': () => import('../pages/Goals'),
+  '/ai-plans': () => import('../pages/AIPlans'),
+  '/calendar': () => import('../pages/Calendar'),
+  '/notifications': () => import('../pages/Notifications'),
+  '/profile': () => import('../pages/Profile'),
+};
+
 export default function MobileLayout() {
   const { logout } = useAuth();
 
@@ -124,6 +136,14 @@ export default function MobileLayout() {
           <NavLink
             key={item.to}
             to={item.to}
+            onMouseEnter={() => {
+              const preload = routePreloaders[item.to];
+              if (preload) void preload();
+            }}
+            onFocus={() => {
+              const preload = routePreloaders[item.to];
+              if (preload) void preload();
+            }}
             className={({ isActive }) =>
               `tab${isActive ? ' tab--active' : ''}${item.mobileOnly ? ' tab--desktop-only' : ''}`
             }

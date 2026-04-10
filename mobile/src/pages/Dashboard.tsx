@@ -1,15 +1,10 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../lib/api';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from 'recharts';
+import { apiFetchJson, getApiCache } from '../lib/api';
+
+const DashboardCaloriesChart = lazy(
+  () => import('../components/charts/DashboardCaloriesChart'),
+);
 
 interface NutritionLog {
   id: number;
@@ -43,31 +38,64 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!accessToken) return;
-    apiFetch('/api/nutrition', accessToken)
-      .then((r) => {
-        if (!r.ok) return null;
-        return r.json();
-      })
-      .then((d) => { if (d) setRecentMeals(d.nutrition_logs ?? []); })
-      .catch(() => {})
-      .finally(() => setLoadingN(false));
+    const cachedNutrition = getApiCache<{ nutrition_logs?: NutritionLog[] }>(
+      '/api/nutrition',
+      accessToken,
+      45000,
+    );
+    if (cachedNutrition) {
+      setRecentMeals(cachedNutrition.data.nutrition_logs ?? []);
+      setLoadingN(false);
+    }
 
-    apiFetch('/api/workouts', accessToken)
-      .then((r) => {
-        if (!r.ok) return null;
-        return r.json();
-      })
-      .then((d) => { if (d) setWorkouts(d.workouts ?? []); })
-      .catch(() => {})
-      .finally(() => setLoadingW(false));
+    const cachedWorkouts = getApiCache<{ workouts?: Workout[] }>(
+      '/api/workouts',
+      accessToken,
+      45000,
+    );
+    if (cachedWorkouts) {
+      setWorkouts(cachedWorkouts.data.workouts ?? []);
+      setLoadingW(false);
+    }
 
-    apiFetch('/api/streaks', accessToken)
-      .then((r) => {
-        if (!r.ok) return null;
-        return r.json();
+    let cancelled = false;
+
+    apiFetchJson<{ nutrition_logs?: NutritionLog[] }>('/api/nutrition', accessToken, {
+      forceRefresh: true,
+      retries: 1,
+    })
+      .then((d) => {
+        if (!cancelled) setRecentMeals(d.nutrition_logs ?? []);
       })
-      .then((d) => { if (d) setStreak(d); })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingN(false);
+      });
+
+    apiFetchJson<{ workouts?: Workout[] }>('/api/workouts', accessToken, {
+      forceRefresh: true,
+      retries: 1,
+    })
+      .then((d) => {
+        if (!cancelled) setWorkouts(d.workouts ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingW(false);
+      });
+
+    apiFetchJson<StreakData>('/api/streaks', accessToken, {
+      forceRefresh: true,
+      retries: 1,
+    })
+      .then((d) => {
+        if (!cancelled) setStreak(d);
+      })
       .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [accessToken]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -102,24 +130,32 @@ export default function Dashboard() {
         <p className="text-muted">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
       </header>
 
-      <div className="card-grid">
-        <div className="card">
-          <span className="card-label">Calories today</span>
-          <span className="card-value">{totalCals}</span>
+      {(loadingN && loadingW && recentMeals.length === 0 && workouts.length === 0) ? (
+        <div className="card-grid">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="card skeleton-card" />
+          ))}
         </div>
-        <div className="card">
-          <span className="card-label">Protein today</span>
-          <span className="card-value">{totalProtein}g</span>
+      ) : (
+        <div className="card-grid">
+          <div className="card">
+            <span className="card-label">Calories today</span>
+            <span className="card-value">{totalCals}</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Protein today</span>
+            <span className="card-value">{totalProtein}g</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Workouts (7d)</span>
+            <span className="card-value">{loadingW ? '\u2014' : thisWeekWorkouts.length}</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Meals today</span>
+            <span className="card-value">{loadingN ? '\u2014' : todayMeals.length}</span>
+          </div>
         </div>
-        <div className="card">
-          <span className="card-label">Workouts (7d)</span>
-          <span className="card-value">{loadingW ? '\u2014' : thisWeekWorkouts.length}</span>
-        </div>
-        <div className="card">
-          <span className="card-label">Meals today</span>
-          <span className="card-value">{loadingN ? '\u2014' : todayMeals.length}</span>
-        </div>
-      </div>
+      )}
 
       {streak && (
         <section className="section">
@@ -143,18 +179,9 @@ export default function Dashboard() {
       {last7Days.some((d) => d.cal > 0) && (
         <section className="section">
           <h2>Calorie Intake (7 days)</h2>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={last7Days}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
-              <YAxis stroke="#64748b" fontSize={11} />
-              <Tooltip
-                contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: '#94a3b8' }}
-              />
-              <Bar dataKey="cal" fill="#6c63ff" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<div className="skeleton-chart" />}>
+            <DashboardCaloriesChart data={last7Days} />
+          </Suspense>
         </section>
       )}
     </div>

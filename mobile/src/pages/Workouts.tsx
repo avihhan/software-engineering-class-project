@@ -1,6 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../lib/api';
+import {
+  apiFetch,
+  apiFetchJson,
+  getApiCache,
+  invalidateApiCache,
+} from '../lib/api';
 
 interface Workout {
   id: number;
@@ -24,8 +29,20 @@ export default function Workouts() {
 
   function fetchWorkouts() {
     if (!accessToken) return;
-    apiFetch('/api/workouts', accessToken)
-      .then((r) => r.json())
+    const cached = getApiCache<{ workouts?: Workout[] }>(
+      '/api/workouts',
+      accessToken,
+      45000,
+    );
+    if (cached) {
+      setWorkouts(cached.data.workouts ?? []);
+      setLoading(false);
+    }
+
+    apiFetchJson<{ workouts?: Workout[] }>('/api/workouts', accessToken, {
+      forceRefresh: true,
+      retries: 1,
+    })
       .then((d) => setWorkouts(d.workouts ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -65,6 +82,7 @@ export default function Workouts() {
       setReps('');
       setWeight('');
       setShowForm(false);
+      invalidateApiCache('/api/workouts', accessToken);
       fetchWorkouts();
     } catch {
       /* swallow */
@@ -121,7 +139,11 @@ export default function Workouts() {
       )}
 
       {loading ? (
-        <p className="empty-text">Loading&hellip;</p>
+        <section className="section">
+          <div className="skeleton-line skeleton-line--lg" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+        </section>
       ) : workouts.length === 0 ? (
         <section className="section"><p className="empty-text">No workouts logged yet. Tap + Log to start.</p></section>
       ) : (
