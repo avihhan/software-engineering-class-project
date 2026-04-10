@@ -31,6 +31,59 @@ def _normalize_model_name(model_name: str) -> str:
     return aliases.get(raw, raw or "gemini-1.5-pro")
 
 
+def _candidate_models(configured_model: str) -> list[str]:
+    base = [
+        configured_model,
+        "gemini-2.5-pro",         # closest current "3.1 Pro" equivalent
+        "gemini-1.5-pro-latest",  # stable 1.5 pro alias
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-002",
+    ]
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for name in base:
+        normalized = _normalize_model_name(name)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            ordered.append(normalized)
+    return ordered
+
+
+def _resolve_supported_models(genai, candidates: list[str]) -> list[str]:
+    """Prefer candidate models that support generateContent in this project."""
+    try:
+        models = list(genai.list_models())
+    except Exception:
+        return candidates
+
+    by_clean_name: dict[str, str] = {}
+    for model in models:
+        methods = getattr(model, "supported_generation_methods", None) or []
+        if "generateContent" not in methods:
+            continue
+        raw_name = getattr(model, "name", "") or ""
+        if not raw_name:
+            continue
+        clean = raw_name.removeprefix("models/")
+        by_clean_name[clean] = raw_name
+
+    resolved: list[str] = []
+    for c in candidates:
+        if c in by_clean_name:
+            resolved.append(by_clean_name[c])
+
+    # If none of our preferred models exist, try any available "pro" model.
+    if not resolved:
+        pro_models = [
+            raw
+            for clean, raw in by_clean_name.items()
+            if "pro" in clean and clean.startswith("gemini")
+        ]
+        resolved.extend(pro_models[:3])
+
+    return resolved or candidates
+
+
 def _gemini_client():
     """Lazy-import so the app boots even without the package installed."""
     try:
@@ -41,10 +94,7 @@ def _gemini_client():
     if not key:
         return None, [], "GEMINI_API_KEY is not configured"
     configured_model = _normalize_model_name(os.getenv("GEMINI_MODEL", "gemini-1.5-pro"))
-    # Try configured model first, then a pro fallback.
-    model_candidates = [configured_model]
-    if configured_model != "gemini-1.5-pro":
-        model_candidates.append("gemini-1.5-pro")
+    model_candidates = _candidate_models(configured_model)
     genai.configure(api_key=key)
     return genai, model_candidates, None
 
@@ -122,6 +172,7 @@ def generate_meal_plan_with_meta(**kwargs: Any) -> dict[str, Any]:
     context = _build_user_context(**kwargs)
 
     if genai is not None:
+        model_candidates = _resolve_supported_models(genai, model_candidates)
         prompt = _MEAL_PLAN_PROMPT.format(context=context)
         errors: list[str] = []
         for model_name in model_candidates:
@@ -164,6 +215,7 @@ def generate_workout_plan_with_meta(**kwargs: Any) -> dict[str, Any]:
     context = _build_user_context(**kwargs)
 
     if genai is not None:
+        model_candidates = _resolve_supported_models(genai, model_candidates)
         prompt = _WORKOUT_PLAN_PROMPT.format(context=context)
         errors: list[str] = []
         for model_name in model_candidates:
