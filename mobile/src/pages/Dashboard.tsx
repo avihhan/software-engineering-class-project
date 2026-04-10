@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetchJson, getApiCache } from '../lib/api';
 
@@ -124,15 +125,26 @@ export default function Dashboard() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1>
-          Hey{user?.email ? `, ${user.email.split('@')[0]}` : ''}
-        </h1>
-        {tenant?.name && (
-          <p className="text-muted" style={{ marginBottom: '0.2rem' }}>
-            {tenant.name}
-          </p>
-        )}
-        <p className="text-muted">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+        <div className="page-header-row">
+          <div>
+            <h1>
+              Hey{user?.email ? `, ${user.email.split('@')[0]}` : ''}
+            </h1>
+            {tenant?.name && (
+              <p className="text-muted" style={{ marginBottom: '0.2rem' }}>
+                {tenant.name}
+              </p>
+            )}
+            <p className="text-muted">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          </div>
+          <Link
+            to="/billing"
+            className="login-btn"
+            style={{ display: 'inline-block', padding: '0.45rem 0.9rem', fontSize: '0.8125rem', textDecoration: 'none' }}
+          >
+            Join Premium
+          </Link>
+        </div>
       </header>
 
       {(loadingN && loadingW && recentMeals.length === 0 && workouts.length === 0) ? (

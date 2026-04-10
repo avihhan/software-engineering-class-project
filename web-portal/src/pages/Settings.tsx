@@ -28,6 +28,19 @@ interface BillingSettings {
   discount_value: number | null;
 }
 
+interface LemonStore {
+  id: string;
+  name: string | null;
+  status: string | null;
+}
+
+interface LemonVariant {
+  id: string;
+  name: string | null;
+  status: string | null;
+  product_id: string | null;
+}
+
 export default function Settings() {
   const { user, accessToken } = useAuth();
   const [branding, setBranding] = useState<Branding | null>(null);
@@ -59,6 +72,10 @@ export default function Settings() {
   const [billingSaving, setBillingSaving] = useState(false);
   const [billingSaved, setBillingSaved] = useState(false);
   const [billingError, setBillingError] = useState('');
+  const [loadingTestAssets, setLoadingTestAssets] = useState(false);
+  const [testStores, setTestStores] = useState<LemonStore[]>([]);
+  const [testVariants, setTestVariants] = useState<LemonVariant[]>([]);
+  const [testAssetStatus, setTestAssetStatus] = useState('');
   const [summaryStatus, setSummaryStatus] = useState('');
 
   useEffect(() => {
@@ -162,6 +179,42 @@ export default function Settings() {
       setBillingError(err instanceof Error ? err.message : 'Failed to save billing settings');
     } finally {
       setBillingSaving(false);
+    }
+  }
+
+  async function handleLoadTestAssets() {
+    if (!accessToken) return;
+    setLoadingTestAssets(true);
+    setTestAssetStatus('');
+    try {
+      const res = await apiFetch('/api/admin/billing/test-assets', accessToken);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to load Lemon test assets');
+      }
+      const stores = (data.stores ?? []) as LemonStore[];
+      const variants = (data.variants ?? []) as LemonVariant[];
+      setTestStores(stores);
+      setTestVariants(variants);
+
+      if (!billing.store_id && stores[0]?.id) {
+        setBilling((prev) => ({ ...prev, store_id: stores[0].id }));
+      }
+      if (!billing.variant_id && variants[0]?.id) {
+        setBilling((prev) => ({
+          ...prev,
+          variant_id: variants[0].id,
+          product_id: prev.product_id || (variants[0].product_id ?? ''),
+        }));
+      }
+      setTestAssetStatus(
+        `Loaded ${stores.length} store(s) and ${variants.length} variant(s) from Lemon test mode`,
+      );
+    } catch (err) {
+      setTestAssetStatus(err instanceof Error ? err.message : 'Failed to load test assets');
+    } finally {
+      setLoadingTestAssets(false);
+      setTimeout(() => setTestAssetStatus(''), 6000);
     }
   }
 
@@ -421,6 +474,61 @@ export default function Settings() {
               />
             </div>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="login-btn"
+              style={{ padding: '0.45rem 0.9rem', fontSize: '0.75rem' }}
+              onClick={handleLoadTestAssets}
+              disabled={loadingTestAssets || billingSaving}
+            >
+              {loadingTestAssets ? 'Loading Test Assets…' : 'Load Lemon Test Assets'}
+            </button>
+            {testAssetStatus && (
+              <span className="save-badge">{testAssetStatus}</span>
+            )}
+          </div>
+          {testStores.length > 0 && (
+            <div className="form-group">
+              <label htmlFor="pay-store-select">Detected Test Stores</label>
+              <select
+                id="pay-store-select"
+                value={billing.store_id}
+                onChange={(e) => setBilling((prev) => ({ ...prev, store_id: e.target.value }))}
+                disabled={billingSaving}
+              >
+                {testStores.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name || 'Store'} ({store.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {testVariants.length > 0 && (
+            <div className="form-group">
+              <label htmlFor="pay-variant-select">Detected Test Variants</label>
+              <select
+                id="pay-variant-select"
+                value={billing.variant_id}
+                onChange={(e) => {
+                  const selected = testVariants.find((v) => v.id === e.target.value);
+                  setBilling((prev) => ({
+                    ...prev,
+                    variant_id: e.target.value,
+                    product_id: selected?.product_id || prev.product_id,
+                  }));
+                }}
+                disabled={billingSaving}
+              >
+                {testVariants.map((variant) => (
+                  <option key={variant.id} value={variant.id}>
+                    {variant.name || 'Variant'} ({variant.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label htmlFor="pay-store">Lemon Store ID</label>

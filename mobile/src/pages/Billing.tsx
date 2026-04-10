@@ -100,11 +100,16 @@ export default function Billing() {
             <button
               type="button"
               className="login-btn"
-              disabled={startingCheckout || !billing?.requires_payment}
+              disabled={startingCheckout || !billing?.billing_enabled}
               onClick={handleCheckout}
             >
               {startingCheckout ? 'Redirecting…' : 'Continue to Payment'}
             </button>
+            {!billing?.requires_payment && (
+              <p className="form-hint" style={{ marginTop: '0.5rem' }}>
+                Your trial may still be active, but you can prepay now.
+              </p>
+            )}
           </div>
         )}
       </div>

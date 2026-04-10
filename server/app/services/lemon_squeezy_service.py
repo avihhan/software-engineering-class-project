@@ -17,6 +17,72 @@ def verify_webhook_signature(raw_body: bytes, signature: str, secret: str) -> bo
     return hmac.compare_digest(digest, signature)
 
 
+def _request_json(
+    *,
+    api_key: str,
+    path: str,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    data = None
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/vnd.api+json"
+
+    req = request.Request(
+        f"{LEMON_API_BASE}{path}",
+        data=data,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Lemon Squeezy API failed ({path}): {details}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Lemon Squeezy API request failed ({path})") from exc
+
+
+def list_test_mode_assets(api_key: str) -> dict[str, Any]:
+    stores_resp = _request_json(api_key=api_key, path="/stores?page[size]=100")
+    variants_resp = _request_json(api_key=api_key, path="/variants?page[size]=250")
+
+    stores: list[dict[str, Any]] = []
+    for item in stores_resp.get("data") or []:
+        attrs = item.get("attributes") or {}
+        stores.append(
+            {
+                "id": item.get("id"),
+                "name": attrs.get("name"),
+                "slug": attrs.get("slug"),
+                "status": attrs.get("status"),
+            }
+        )
+
+    variants: list[dict[str, Any]] = []
+    for item in variants_resp.get("data") or []:
+        attrs = item.get("attributes") or {}
+        rel = item.get("relationships") or {}
+        product_rel = ((rel.get("product") or {}).get("data") or {})
+        variants.append(
+            {
+                "id": item.get("id"),
+                "name": attrs.get("name"),
+                "status": attrs.get("status"),
+                "price": attrs.get("price"),
+                "product_id": product_rel.get("id"),
+            }
+        )
+
+    return {"stores": stores, "variants": variants}
+
+
 def create_checkout(
     *,
     api_key: str,
@@ -50,25 +116,15 @@ def create_checkout(
             "redirect_url": success_redirect_url
         }
 
-    req = request.Request(
-        f"{LEMON_API_BASE}/checkouts",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/vnd.api+json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
-
     try:
-        with request.urlopen(req, timeout=20) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Lemon Squeezy checkout failed: {details}") from exc
-    except Exception as exc:
-        raise RuntimeError("Lemon Squeezy checkout request failed") from exc
+        body = _request_json(
+            api_key=api_key,
+            path="/checkouts",
+            method="POST",
+            payload=payload,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(str(exc).replace("API failed (/checkouts)", "checkout failed")) from exc
 
     data = body.get("data") or {}
     attributes = data.get("attributes") or {}

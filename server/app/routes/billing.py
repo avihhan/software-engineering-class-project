@@ -78,9 +78,22 @@ def create_my_checkout():
     if not snapshot["requires_payment"] and snapshot["status"] in {"active", "paid"}:
         return jsonify({"error": "Payment is already active"}), 400
 
-    api_key = os.environ.get("LEMON_SQUEEZY_API_KEY", "").strip()
+    api_key = (
+        os.environ.get("LEMON_SQUEEZY_API_KEY", "").strip()
+        or os.environ.get("LEMONSQUEEZY_API_KEY", "").strip()
+    )
     if not api_key:
-        return jsonify({"error": "Missing server Lemon Squeezy API key"}), 500
+        return (
+            jsonify(
+                {
+                    "error": (
+                        "Missing server Lemon Squeezy API key "
+                        "(set LEMON_SQUEEZY_API_KEY or LEMONSQUEEZY_API_KEY)"
+                    )
+                }
+            ),
+            500,
+        )
 
     success_redirect_url = os.environ.get(
         "LEMON_SQUEEZY_REDIRECT_URL", ""

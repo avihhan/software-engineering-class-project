@@ -5,6 +5,7 @@ from app.registration_code import (
     reset_tenant_registration_code,
 )
 from app.services.billing_service import get_tenant_billing_config
+from app.services.lemon_squeezy_service import list_test_mode_assets
 
 bp = Blueprint("admin", __name__)
 
@@ -278,6 +279,35 @@ def get_billing_settings():
                 "warning": "Billing config unavailable. Ensure migration 004 is applied.",
             }
         )
+
+
+@bp.route("/billing/test-assets", methods=["GET"])
+@require_auth
+@require_role("owner")
+def get_billing_test_assets():
+    """List Lemon test-mode stores/variants for fast tenant setup."""
+    import os
+
+    api_key = (
+        os.environ.get("LEMON_SQUEEZY_API_KEY", "").strip()
+        or os.environ.get("LEMONSQUEEZY_API_KEY", "").strip()
+    )
+    if not api_key:
+        return (
+            jsonify(
+                {
+                    "error": "Missing Lemon API key. Set LEMON_SQUEEZY_API_KEY (or legacy LEMONSQUEEZY_API_KEY)."
+                }
+            ),
+            500,
+        )
+
+    try:
+        assets = list_test_mode_assets(api_key)
+        return jsonify(assets)
+    except RuntimeError as exc:
+        current_app.logger.exception("Failed to fetch Lemon test mode assets")
+        return jsonify({"error": str(exc)}), 502
 
 
 @bp.route("/billing", methods=["PUT"])

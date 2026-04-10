@@ -78,9 +78,6 @@ export default function ProtectedRoute({
   if (requiresPayment && location.pathname !== '/billing') {
     return <Navigate to="/billing" replace />;
   }
-  if (!requiresPayment && location.pathname === '/billing') {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   return <>{children}</>;
 }
