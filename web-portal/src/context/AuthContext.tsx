@@ -79,8 +79,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       persistTokens(at, (e as CustomEvent).detail.refreshToken);
       setState((s) => ({ ...s, accessToken: at }));
     };
+    const invalidHandler = () => {
+      clearTokens();
+      setState({
+        user: null,
+        tenant: null,
+        accessToken: null,
+        loading: false,
+        initialized: true,
+      });
+    };
     window.addEventListener('aurafit:token-refreshed', handler);
-    return () => window.removeEventListener('aurafit:token-refreshed', handler);
+    window.addEventListener('aurafit:auth-invalid', invalidHandler);
+    return () => {
+      window.removeEventListener('aurafit:token-refreshed', handler);
+      window.removeEventListener('aurafit:auth-invalid', invalidHandler);
+    };
   }, []);
 
   useEffect(() => {

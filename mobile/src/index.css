@@ -750,6 +750,55 @@ body {
   margin-top: 0.25rem;
 }
 
+.workout-prompt-card {
+  border: 1px solid rgba(108, 99, 255, 0.28);
+  background: linear-gradient(135deg, rgba(108, 99, 255, 0.12), rgba(59, 130, 246, 0.08));
+}
+
+.workout-log-card {
+  transition: border-color 0.2s ease, transform 0.1s ease;
+}
+
+.workout-log-card:active {
+  transform: scale(0.995);
+}
+
+.workout-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.workout-log-details {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.workout-exercise-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workout-weight-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  border: 1px solid rgba(108, 99, 255, 0.25);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
+}
+
 .text-muted {
   color: var(--text-dim);
   font-size: 0.8125rem;

@@ -125,6 +125,60 @@ export interface BillingSnapshot {
   };
 }
 
+export interface WorkoutLog {
+  id: number;
+  workout_date: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface WorkoutExercise {
+  id: number;
+  workout_log_id: number;
+  exercise_name: string;
+  sets: number | null;
+  reps: number | null;
+  weight: number | null;
+  duration_minutes: number | null;
+  rpe: number | null;
+}
+
+export interface WorkoutDetailResponse {
+  workout: WorkoutLog;
+  exercises: WorkoutExercise[];
+}
+
+export interface FeedPost {
+  id: number;
+  tenant_id: number;
+  author_user_id: number;
+  author_email?: string | null;
+  type: 'video' | 'article' | 'post' | 'resource';
+  title: string | null;
+  body: string | null;
+  media_url: string | null;
+  media_path: string | null;
+  media_mime: string | null;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+  like_count: number;
+  comment_count: number;
+  viewer_has_liked: boolean;
+}
+
+export interface FeedComment {
+  id: number;
+  tenant_id: number;
+  post_id: number;
+  user_id: number;
+  user_email?: string | null;
+  body: string;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function apiSignup(
   email: string,
   password: string,
@@ -180,6 +234,125 @@ export async function apiCreateBillingCheckout(
     throw new Error(body.error || 'Unable to start checkout');
   }
   return body.checkout_url as string;
+}
+
+export async function apiCreateWorkout(
+  accessToken: string,
+  payload: { workout_date: string; notes?: string | null },
+): Promise<WorkoutLog> {
+  const res = await apiFetch('/api/workouts', accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.workout) {
+    throw new Error(body.error || 'Unable to create workout');
+  }
+  return body.workout as WorkoutLog;
+}
+
+export async function apiGetWorkoutDetail(
+  accessToken: string,
+  workoutId: number,
+): Promise<WorkoutDetailResponse> {
+  const res = await apiFetch(`/api/workouts/${workoutId}`, accessToken);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.workout) {
+    throw new Error(body.error || 'Unable to load workout details');
+  }
+  return {
+    workout: body.workout as WorkoutLog,
+    exercises: (body.exercises ?? []) as WorkoutExercise[],
+  };
+}
+
+export async function apiAddWorkoutExercise(
+  accessToken: string,
+  workoutId: number,
+  payload: {
+    exercise_name: string;
+    sets?: number;
+    reps?: number;
+    weight?: number;
+    duration_minutes?: number;
+    rpe?: number;
+  },
+): Promise<WorkoutExercise> {
+  const res = await apiFetch(`/api/workouts/${workoutId}/exercises`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.exercise) {
+    throw new Error(body.error || 'Unable to add exercise');
+  }
+  return body.exercise as WorkoutExercise;
+}
+
+export async function apiGetFeedPosts(
+  accessToken: string,
+): Promise<FeedPost[]> {
+  const res = await apiFetch('/api/content-feed/posts', accessToken);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Unable to load content feed');
+  }
+  return (body.posts ?? []) as FeedPost[];
+}
+
+export async function apiLikeFeedPost(
+  accessToken: string,
+  postId: number,
+): Promise<void> {
+  const res = await apiFetch(`/api/content-feed/posts/${postId}/likes`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Unable to like post');
+  }
+}
+
+export async function apiUnlikeFeedPost(
+  accessToken: string,
+  postId: number,
+): Promise<void> {
+  const res = await apiFetch(`/api/content-feed/posts/${postId}/likes/me`, accessToken, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Unable to unlike post');
+  }
+}
+
+export async function apiGetFeedComments(
+  accessToken: string,
+  postId: number,
+): Promise<FeedComment[]> {
+  const res = await apiFetch(`/api/content-feed/posts/${postId}/comments`, accessToken);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Unable to load comments');
+  }
+  return (body.comments ?? []) as FeedComment[];
+}
+
+export async function apiCreateFeedComment(
+  accessToken: string,
+  postId: number,
+  commentBody: string,
+): Promise<FeedComment> {
+  const res = await apiFetch(`/api/content-feed/posts/${postId}/comments`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ body: commentBody }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.comment) {
+    throw new Error(body.error || 'Unable to add comment');
+  }
+  return body.comment as FeedComment;
 }
 
 const TOKEN_KEY = 'aurafit_m_access_token';

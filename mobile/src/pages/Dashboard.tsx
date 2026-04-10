@@ -121,6 +121,7 @@ export default function Dashboard() {
     const diffDays = (now.getTime() - d.getTime()) / 86400000;
     return diffDays >= 0 && diffDays < 7;
   });
+  const hasTodayWorkout = workouts.some((w) => w.workout_date === today);
 
   return (
     <div className="page">
@@ -190,6 +191,24 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {!hasTodayWorkout && (
+        <section className="section workout-prompt-card">
+          <div>
+            <h2 style={{ marginBottom: '0.35rem' }}>Log today&apos;s workout</h2>
+            <p className="form-hint" style={{ margin: 0 }}>
+              Keep your streak alive by recording your sets, reps, and weight.
+            </p>
+          </div>
+          <Link
+            to="/workouts?logToday=1"
+            className="login-btn"
+            style={{ display: 'inline-block', width: 'auto', marginTop: '0.75rem', textDecoration: 'none', padding: '0.5rem 0.9rem' }}
+          >
+            Log Workout
+          </Link>
         </section>
       )}
 

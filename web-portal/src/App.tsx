@@ -8,6 +8,7 @@ import Members from './pages/Members';
 import Exercises from './pages/Exercises';
 import Settings from './pages/Settings';
 import AIPlans from './pages/AIPlans';
+import ContentResources from './pages/ContentResources';
 import MemberReport from './pages/MemberReport';
 import PlatformDashboard from './pages/PlatformDashboard';
 import TenantManagement from './pages/TenantManagement';
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="members/:memberId/report" element={<MemberReport />} />
             <Route path="exercises" element={<Exercises />} />
             <Route path="ai-plans" element={<AIPlans />} />
+            <Route path="content-resources" element={<ContentResources />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

@@ -157,6 +157,95 @@ export async function apiGetMe(
   return res.json();
 }
 
+export interface FeedPost {
+  id: number;
+  tenant_id: number;
+  author_user_id: number;
+  author_email?: string | null;
+  type: 'video' | 'article' | 'post' | 'resource';
+  title: string | null;
+  body: string | null;
+  media_url: string | null;
+  media_path: string | null;
+  media_mime: string | null;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+  like_count: number;
+  comment_count: number;
+  viewer_has_liked: boolean;
+}
+
+export interface UploadSignResponse {
+  bucket: string;
+  object_path: string;
+  signed_upload_url: string | null;
+  token?: string | null;
+  public_url: string | null;
+}
+
+export async function apiOwnerGetFeedPosts(
+  accessToken: string,
+): Promise<FeedPost[]> {
+  const res = await apiFetch('/api/content-feed/posts?include_unpublished=true', accessToken);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Unable to load content posts');
+  }
+  return (body.posts ?? []) as FeedPost[];
+}
+
+export async function apiOwnerCreateFeedPost(
+  accessToken: string,
+  payload: {
+    type: 'video' | 'article' | 'post' | 'resource';
+    title?: string | null;
+    body?: string | null;
+    media_url?: string | null;
+    media_path?: string | null;
+    media_mime?: string | null;
+    is_published?: boolean;
+  },
+): Promise<FeedPost> {
+  const res = await apiFetch('/api/content-feed/posts', accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.post) {
+    throw new Error(body.error || 'Unable to create post');
+  }
+  return body.post as FeedPost;
+}
+
+export async function apiOwnerDeleteFeedPost(
+  accessToken: string,
+  postId: number,
+): Promise<void> {
+  const res = await apiFetch(`/api/content-feed/posts/${postId}`, accessToken, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Unable to delete post');
+  }
+}
+
+export async function apiOwnerCreateUploadSignUrl(
+  accessToken: string,
+  filename: string,
+): Promise<UploadSignResponse> {
+  const res = await apiFetch('/api/content-feed/upload-sign-url', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ filename }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Unable to create upload URL');
+  }
+  return body as UploadSignResponse;
+}
+
 const TOKEN_KEY = 'aurafit_access_token';
 const REFRESH_KEY = 'aurafit_refresh_token';
 
@@ -209,7 +298,14 @@ export async function apiFetch(
     }
     try {
       const newToken = await refreshPromise;
-      return doFetch(newToken);
+      const retried = await doFetch(newToken);
+      if (retried.status === 401) {
+        // Token refresh succeeded but backend still rejects auth (e.g. user removed/mismatch).
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_KEY);
+        window.dispatchEvent(new CustomEvent('aurafit:auth-invalid'));
+      }
+      return retried;
     } catch {
       /* refresh failed — return original 401 */
     }

@@ -10,6 +10,7 @@ const routePreloaders: Record<string, () => Promise<unknown>> = {
   '/ai-plans': () => import('../pages/AIPlans'),
   '/calendar': () => import('../pages/Calendar'),
   '/notifications': () => import('../pages/Notifications'),
+  '/content': () => import('../pages/ContentFeed'),
   '/profile': () => import('../pages/Profile'),
 };
 
@@ -105,6 +106,19 @@ export default function MobileLayout() {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      ),
+    },
+    {
+      to: '/content',
+      label: 'Content',
+      mobileOnly: false,
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="7" y1="8" x2="17" y2="8" />
+          <line x1="7" y1="12" x2="17" y2="12" />
+          <line x1="7" y1="16" x2="13" y2="16" />
         </svg>
       ),
     },

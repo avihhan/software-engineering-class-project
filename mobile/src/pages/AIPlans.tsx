@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../lib/api';
+import {
+  apiAddWorkoutExercise,
+  apiCreateWorkout,
+  apiFetch,
+  invalidateApiCache,
+} from '../lib/api';
 
 interface Meal {
   meal: string;
@@ -54,6 +59,16 @@ export default function AIPlans() {
   const [loadingWorkout, setLoadingWorkout] = useState(false);
   const [workoutError, setWorkoutError] = useState('');
   const [workoutWarning, setWorkoutWarning] = useState('');
+  const [importDate, setImportDate] = useState(new Date().toISOString().slice(0, 10));
+  const [importingDayIdx, setImportingDayIdx] = useState<number | null>(null);
+  const [importStatus, setImportStatus] = useState('');
+
+  function parseRepsToNumber(reps: string): number | undefined {
+    const first = String(reps || '').match(/\d+/);
+    if (!first) return undefined;
+    const val = Number(first[0]);
+    return Number.isFinite(val) ? val : undefined;
+  }
 
   async function genMeal() {
     if (!accessToken) return;
@@ -88,6 +103,7 @@ export default function AIPlans() {
     setWorkoutPlan(null);
     setWorkoutError('');
     setWorkoutWarning('');
+    setImportStatus('');
     try {
       const res = await apiFetch('/api/ai/workout-plan', accessToken, {
         method: 'POST',
@@ -109,6 +125,32 @@ export default function AIPlans() {
     setLoadingWorkout(false);
   }
 
+  async function addDayToWorkout(day: WorkoutDay, dayIndex: number) {
+    if (!accessToken || !importDate) return;
+    setImportingDayIdx(dayIndex);
+    setImportStatus('');
+    setWorkoutError('');
+    try {
+      const workout = await apiCreateWorkout(accessToken, {
+        workout_date: importDate,
+        notes: `Imported from AI plan: ${day.day} - ${day.focus}`,
+      });
+      for (const ex of day.exercises) {
+        await apiAddWorkoutExercise(accessToken, workout.id, {
+          exercise_name: ex.name,
+          sets: Number.isFinite(ex.sets) ? ex.sets : undefined,
+          reps: parseRepsToNumber(ex.reps),
+        });
+      }
+      invalidateApiCache('/api/workouts', accessToken);
+      setImportStatus(`Added ${day.day} block to workouts for ${importDate}.`);
+    } catch (err) {
+      setWorkoutError(err instanceof Error ? err.message : 'Unable to import AI day');
+    } finally {
+      setImportingDayIdx(null);
+    }
+  }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -128,7 +170,7 @@ export default function AIPlans() {
               <input id="ai-mg" value={mealGoal} onChange={(e) => setMealGoal(e.target.value)} placeholder="e.g. Lose weight" />
             </div>
             <button className="login-btn" onClick={genMeal} disabled={loadingMeal}>
-              {loadingMeal ? 'Generating\u2026' : 'Generate'}
+              {loadingMeal ? 'Generating…' : 'Generate'}
             </button>
           </div>
           {mealError && <p className="login-error" style={{ marginTop: '0.75rem' }}>{mealError}</p>}
@@ -165,12 +207,17 @@ export default function AIPlans() {
               <label htmlFor="ai-wg">Goal (optional)</label>
               <input id="ai-wg" value={workoutGoal} onChange={(e) => setWorkoutGoal(e.target.value)} placeholder="e.g. Strength" />
             </div>
+            <div className="form-group">
+              <label htmlFor="ai-import-date">Import Date</label>
+              <input id="ai-import-date" type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} />
+            </div>
             <button className="login-btn" onClick={genWorkout} disabled={loadingWorkout}>
-              {loadingWorkout ? 'Generating\u2026' : 'Generate'}
+              {loadingWorkout ? 'Generating…' : 'Generate'}
             </button>
           </div>
           {workoutError && <p className="login-error" style={{ marginTop: '0.75rem' }}>{workoutError}</p>}
           {workoutWarning && <p className="ai-demo-tag">{workoutWarning}</p>}
+          {importStatus && <p className="form-hint" style={{ color: '#86efac' }}>{importStatus}</p>}
 
           {workoutPlan && (
             <div style={{ marginTop: '1rem' }}>
@@ -186,6 +233,14 @@ export default function AIPlans() {
                       <span className="ai-micro">{ex.sets}×{ex.reps}</span>
                     </div>
                   ))}
+                  <button
+                    className="login-btn"
+                    style={{ marginTop: '0.6rem', width: 'auto', padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
+                    onClick={() => void addDayToWorkout(d, i)}
+                    disabled={importingDayIdx === i}
+                  >
+                    {importingDayIdx === i ? 'Adding…' : 'Add to Workouts'}
+                  </button>
                 </div>
               ))}
             </div>

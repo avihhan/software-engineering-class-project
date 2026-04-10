@@ -1,22 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  apiFetch,
+  apiAddWorkoutExercise,
+  apiCreateWorkout,
+  apiGetWorkoutDetail,
   apiFetchJson,
   getApiCache,
   invalidateApiCache,
+  type WorkoutExercise,
+  type WorkoutLog,
 } from '../lib/api';
-
-interface Workout {
-  id: number;
-  workout_date: string;
-  notes: string | null;
-  created_at: string;
-}
 
 export default function Workouts() {
   const { accessToken } = useAuth();
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const location = useLocation();
+  const [workouts, setWorkouts] = useState<WorkoutLog[]>([]);
+  const [expandedWorkoutId, setExpandedWorkoutId] = useState<number | null>(null);
+  const [detailsByWorkout, setDetailsByWorkout] = useState<Record<number, WorkoutExercise[]>>({});
+  const [detailsLoadingId, setDetailsLoadingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -26,10 +28,23 @@ export default function Workouts() {
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function parseWeightToOneDecimal(raw: string): number | undefined {
+    if (!raw.trim()) return undefined;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return undefined;
+    return Math.round(parsed * 10) / 10;
+  }
+
+  function formatWeight(weightValue: number | null): string {
+    if (weightValue === null || Number.isNaN(weightValue)) return '--';
+    return `${weightValue.toFixed(1)} lbs`;
+  }
 
   function fetchWorkouts() {
     if (!accessToken) return;
-    const cached = getApiCache<{ workouts?: Workout[] }>(
+    const cached = getApiCache<{ workouts?: WorkoutLog[] }>(
       '/api/workouts',
       accessToken,
       45000,
@@ -39,39 +54,64 @@ export default function Workouts() {
       setLoading(false);
     }
 
-    apiFetchJson<{ workouts?: Workout[] }>('/api/workouts', accessToken, {
+    apiFetchJson<{ workouts?: WorkoutLog[] }>('/api/workouts', accessToken, {
       forceRefresh: true,
       retries: 1,
     })
       .then((d) => setWorkouts(d.workouts ?? []))
-      .catch(() => {})
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Unable to load workouts');
+      })
       .finally(() => setLoading(false));
   }
 
   useEffect(fetchWorkouts, [accessToken]);
+  useEffect(() => {
+    const qs = new URLSearchParams(location.search);
+    if (qs.get('logToday') === '1') {
+      setShowForm(true);
+      setDate(new Date().toISOString().slice(0, 10));
+    }
+  }, [location.search]);
+
+  async function toggleWorkoutDetails(workoutId: number) {
+    if (!accessToken) return;
+    if (expandedWorkoutId === workoutId) {
+      setExpandedWorkoutId(null);
+      return;
+    }
+    setExpandedWorkoutId(workoutId);
+    if (detailsByWorkout[workoutId]) return;
+    setDetailsLoadingId(workoutId);
+    try {
+      const detail = await apiGetWorkoutDetail(accessToken, workoutId);
+      setDetailsByWorkout((prev) => ({ ...prev, [workoutId]: detail.exercises }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load workout detail');
+    } finally {
+      setDetailsLoadingId(null);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!accessToken || !date) return;
     setSaving(true);
+    setError('');
 
     try {
-      const wRes = await apiFetch('/api/workouts', accessToken, {
-        method: 'POST',
-        body: JSON.stringify({ workout_date: date, notes: notes || undefined }),
+      const workout = await apiCreateWorkout(accessToken, {
+        workout_date: date,
+        notes: notes || undefined,
       });
-      const wData = await wRes.json();
-      const workoutId = wData.workout?.id;
+      const workoutId = workout.id;
 
       if (workoutId && exName.trim()) {
-        await apiFetch(`/api/workouts/${workoutId}/exercises`, accessToken, {
-          method: 'POST',
-          body: JSON.stringify({
-            exercise_name: exName.trim(),
-            sets: sets ? Number(sets) : undefined,
-            reps: reps ? Number(reps) : undefined,
-            weight: weight ? Number(weight) : undefined,
-          }),
+        await apiAddWorkoutExercise(accessToken, workoutId, {
+          exercise_name: exName.trim(),
+          sets: sets ? Number(sets) : undefined,
+          reps: reps ? Number(reps) : undefined,
+          weight: parseWeightToOneDecimal(weight),
         });
       }
 
@@ -83,9 +123,27 @@ export default function Workouts() {
       setWeight('');
       setShowForm(false);
       invalidateApiCache('/api/workouts', accessToken);
+      setExpandedWorkoutId(workoutId);
+      setDetailsByWorkout((prev) => ({
+        ...prev,
+        [workoutId]: exName.trim()
+          ? [
+              {
+                id: -1,
+                workout_log_id: workoutId,
+                exercise_name: exName.trim(),
+                sets: sets ? Number(sets) : null,
+                reps: reps ? Number(reps) : null,
+                weight: parseWeightToOneDecimal(weight) ?? null,
+                duration_minutes: null,
+                rpe: null,
+              },
+            ]
+          : [],
+      }));
       fetchWorkouts();
-    } catch {
-      /* swallow */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save workout');
     } finally {
       setSaving(false);
     }
@@ -99,6 +157,12 @@ export default function Workouts() {
           {showForm ? 'Cancel' : '+ Log'}
         </button>
       </header>
+
+      {error && (
+        <section className="section">
+          <p className="empty-text" style={{ color: '#fca5a5' }}>{error}</p>
+        </section>
+      )}
 
       {showForm && (
         <section className="section">
@@ -128,7 +192,17 @@ export default function Workouts() {
               </div>
               <div className="form-group">
                 <label htmlFor="w-wt">Weight</label>
-                <input id="w-wt" type="number" value={weight} onChange={(e) => setWeight(e.target.value)} disabled={saving} />
+                <input
+                  id="w-wt"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  disabled={saving}
+                  placeholder="Weight (lbs)"
+                />
+                <span className="form-hint">Weight (lbs), optional, one decimal allowed.</span>
               </div>
             </div>
             <button type="submit" className="login-btn" disabled={saving}>
@@ -147,12 +221,45 @@ export default function Workouts() {
       ) : workouts.length === 0 ? (
         <section className="section"><p className="empty-text">No workouts logged yet. Tap + Log to start.</p></section>
       ) : (
-        workouts.map((w) => (
-          <div key={w.id} className="card" style={{ marginBottom: '0.75rem' }}>
-            <span className="card-label">{w.workout_date}</span>
-            {w.notes && <span className="card-note">{w.notes}</span>}
-          </div>
-        ))
+        workouts.map((w) => {
+          const isOpen = expandedWorkoutId === w.id;
+          const exercises = detailsByWorkout[w.id] || [];
+          return (
+            <div
+              key={w.id}
+              className="card workout-log-card"
+              style={{ marginBottom: '0.75rem', cursor: 'pointer' }}
+              onClick={() => void toggleWorkoutDetails(w.id)}
+            >
+              <div className="workout-log-header">
+                <span className="card-label">{w.workout_date}</span>
+                <span className="text-muted">{isOpen ? 'Hide details' : 'View details'}</span>
+              </div>
+              {w.notes && <span className="card-note">{w.notes}</span>}
+              {isOpen && (
+                <div className="workout-log-details">
+                  {detailsLoadingId === w.id ? (
+                    <p className="form-hint">Loading exercise details…</p>
+                  ) : exercises.length === 0 ? (
+                    <p className="form-hint">No exercises added for this workout.</p>
+                  ) : (
+                    exercises.map((ex, idx) => (
+                      <div key={`${w.id}-${ex.id}-${idx}`} className="workout-exercise-row">
+                        <div>
+                          <strong>{ex.exercise_name}</strong>
+                          <p className="form-hint" style={{ margin: '0.2rem 0 0' }}>
+                            {ex.sets ?? '--'} sets · {ex.reps ?? '--'} reps
+                          </p>
+                        </div>
+                        <span className="workout-weight-chip">{formatWeight(ex.weight)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );
