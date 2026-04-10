@@ -31,6 +31,13 @@ def _safe_int(value: Any, fallback: int = 0) -> int:
         return fallback
 
 
+def _result_data(result: Any) -> Any:
+    """Safely read postgrest result.data even when execute() returns None."""
+    if result is None:
+        return None
+    return getattr(result, "data", None)
+
+
 def _is_postgrest_missing_response(exc: Exception) -> bool:
     text = str(exc).lower()
     return "missing response" in text and ("'code': '204'" in text or '"code": "204"' in text)
@@ -55,7 +62,7 @@ def get_tenant_billing_config(sb, tenant_id: int) -> dict[str, Any]:
             .maybe_single()
             .execute()
         )
-        data = result.data or {}
+        data = _result_data(result) or {}
     except Exception as exc:
         # Some local/dev setups hit a postgrest-py "Missing response" bug.
         # Treat as "no config row yet" so the caller can proceed with defaults.
@@ -124,8 +131,9 @@ def ensure_member_billing_status(
             .maybe_single()
             .execute()
         )
-        if existing.data:
-            return existing.data
+        existing_data = _result_data(existing)
+        if existing_data:
+            return existing_data
     except Exception as exc:
         if _is_billing_status_table_unavailable(exc):
             return default_status
@@ -144,8 +152,9 @@ def ensure_member_billing_status(
             )
             .execute()
         )
-        if inserted.data:
-            return inserted.data[0]
+        inserted_data = _result_data(inserted)
+        if inserted_data:
+            return inserted_data[0]
     except Exception as exc:
         if _is_billing_status_table_unavailable(exc):
             return default_status
@@ -160,7 +169,7 @@ def ensure_member_billing_status(
             .maybe_single()
             .execute()
         )
-        return fallback.data or default_status
+        return _result_data(fallback) or default_status
     except Exception as exc:
         if _is_billing_status_table_unavailable(exc):
             return default_status
