@@ -4,12 +4,10 @@ import jwt as pyjwt
 from flask import Blueprint, current_app, g, jsonify, request
 from supabase import Client, create_client
 from app.registration_code import (
-    default_registration_code_for_tenant,
     is_valid_registration_code,
     resolve_tenant_by_registration_code,
     reset_tenant_registration_code,
 )
-from app.utils import PLATFORM_TENANT_ID
 
 bp = Blueprint("auth", __name__)
 
@@ -342,13 +340,9 @@ def register_tenant():
     tenant_id = tenant["id"]
     try:
         registration_code = reset_tenant_registration_code(sb, tenant_id)
-    except Exception as exc:
-        # If migration 003 is not yet applied, still return a deterministic default code.
-        if "42703" in str(exc) and "registration_code" in str(exc):
-            registration_code = default_registration_code_for_tenant(tenant_id)
-        else:
-            sb.table("tenants").delete().eq("id", tenant_id).execute()
-            return jsonify({"error": "Failed to create registration code"}), 500
+    except Exception:
+        sb.table("tenants").delete().eq("id", tenant_id).execute()
+        return jsonify({"error": "Failed to create registration code"}), 500
     tenant["registration_code"] = registration_code
 
     try:

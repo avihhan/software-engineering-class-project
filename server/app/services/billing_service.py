@@ -33,7 +33,16 @@ def _safe_int(value: Any, fallback: int = 0) -> int:
 
 def _is_postgrest_missing_response(exc: Exception) -> bool:
     text = str(exc).lower()
-    return "missing response" in text and "'code': '204'" in text
+    return "missing response" in text and ("'code': '204'" in text or '"code": "204"' in text)
+
+
+def _is_billing_status_table_unavailable(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return (
+        _is_postgrest_missing_response(exc)
+        or "42p01" in text
+        or "tenant_member_billing_status" in text and "does not exist" in text
+    )
 
 
 def get_tenant_billing_config(sb, tenant_id: int) -> dict[str, Any]:
@@ -99,46 +108,63 @@ def ensure_member_billing_status(
     trial_ends_at = created_dt + timedelta(days=trial_days)
     trial_ends_iso = trial_ends_at.isoformat()
 
-    existing = (
-        sb.table("tenant_member_billing_status")
-        .select("*")
-        .eq("tenant_id", tenant_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
-    if existing.data:
-        return existing.data
-
-    inserted = (
-        sb.table("tenant_member_billing_status")
-        .insert(
-            {
-                "tenant_id": tenant_id,
-                "user_id": user_id,
-                "status": "trialing",
-                "trial_ends_at": trial_ends_iso,
-            }
-        )
-        .execute()
-    )
-    if inserted.data:
-        return inserted.data[0]
-
-    fallback = (
-        sb.table("tenant_member_billing_status")
-        .select("*")
-        .eq("tenant_id", tenant_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
-    return fallback.data or {
+    default_status = {
         "tenant_id": tenant_id,
         "user_id": user_id,
         "status": "trialing",
         "trial_ends_at": trial_ends_iso,
     }
+
+    try:
+        existing = (
+            sb.table("tenant_member_billing_status")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if existing.data:
+            return existing.data
+    except Exception as exc:
+        if _is_billing_status_table_unavailable(exc):
+            return default_status
+        raise
+
+    try:
+        inserted = (
+            sb.table("tenant_member_billing_status")
+            .insert(
+                {
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "status": "trialing",
+                    "trial_ends_at": trial_ends_iso,
+                }
+            )
+            .execute()
+        )
+        if inserted.data:
+            return inserted.data[0]
+    except Exception as exc:
+        if _is_billing_status_table_unavailable(exc):
+            return default_status
+        raise
+
+    try:
+        fallback = (
+            sb.table("tenant_member_billing_status")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        return fallback.data or default_status
+    except Exception as exc:
+        if _is_billing_status_table_unavailable(exc):
+            return default_status
+        raise
 
 
 def get_member_billing_snapshot(

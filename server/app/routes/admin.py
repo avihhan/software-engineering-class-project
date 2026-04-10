@@ -1,7 +1,6 @@
 from flask import Blueprint, current_app, g, jsonify, request
 from app.auth import get_supabase_admin, require_auth, require_role
 from app.registration_code import (
-    default_registration_code_for_tenant,
     ensure_tenant_registration_code,
     reset_tenant_registration_code,
 )
@@ -10,18 +9,13 @@ from app.services.billing_service import get_tenant_billing_config
 bp = Blueprint("admin", __name__)
 
 
-def _is_registration_code_missing_column(exc: Exception) -> bool:
-    text = str(exc).lower()
-    return "42703" in text and "registration_code" in text
-
-
 def _is_postgrest_missing_response(exc: Exception) -> bool:
     text = str(exc).lower()
     return "missing response" in text and "'code': '204'" in text
 
 
 def _can_use_branding_fallback(exc: Exception) -> bool:
-    return _is_registration_code_missing_column(exc) or _is_postgrest_missing_response(exc)
+    return _is_postgrest_missing_response(exc)
 
 
 @bp.route("/analytics", methods=["GET"])
@@ -100,7 +94,6 @@ def get_branding():
         )
     except Exception as exc:
         # Fallbacks:
-        # - migration 003 not applied yet (registration_code column missing)
         # - occasional postgrest-py "Missing response" bug (code 204)
         if _can_use_branding_fallback(exc):
             try:
@@ -112,9 +105,7 @@ def get_branding():
                     .execute()
                 )
                 if result.data:
-                    result.data["registration_code"] = default_registration_code_for_tenant(
-                        g.tenant_id
-                    )
+                    result.data["registration_code"] = None
                     return jsonify({"branding": result.data})
             except Exception:
                 pass
@@ -128,9 +119,7 @@ def get_branding():
                         "primary_color": None,
                         "secondary_color": None,
                         "custom_domain": None,
-                        "registration_code": default_registration_code_for_tenant(
-                            g.tenant_id
-                        ),
+                        "registration_code": None,
                     }
                 }
             )
@@ -178,8 +167,8 @@ def update_branding():
                 code_row.data.get("registration_code") if code_row and code_row.data else None
             )
         except Exception as exc:
-            if _can_use_branding_fallback(exc):
-                current_code = default_registration_code_for_tenant(g.tenant_id)
+            if _is_postgrest_missing_response(exc):
+                current_code = None
             else:
                 raise
     tenant["registration_code"] = ensure_tenant_registration_code(
@@ -195,17 +184,12 @@ def reset_registration_code():
     sb = get_supabase_admin()
     try:
         new_code = reset_tenant_registration_code(sb, g.tenant_id)
-    except Exception as exc:
-        if _can_use_branding_fallback(exc):
-            # Fallback until migration 003 exists in DB.
-            return jsonify(
-                {"registration_code": default_registration_code_for_tenant(g.tenant_id)}
-            )
+    except Exception:
         current_app.logger.exception("Failed to reset tenant registration code")
         return (
             jsonify(
                 {
-                    "error": "Unable to reset registration code. Ensure migration 003 is applied."
+                    "error": "Unable to reset registration code. Ensure migration 003 is applied and try again."
                 }
             ),
             500,

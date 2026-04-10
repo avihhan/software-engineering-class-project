@@ -1,9 +1,6 @@
 from flask import Blueprint, g, jsonify, request
 from app.auth import get_supabase_admin, require_auth, require_role
-from app.registration_code import (
-    default_registration_code_for_tenant,
-    reset_tenant_registration_code,
-)
+from app.registration_code import reset_tenant_registration_code
 
 bp = Blueprint("platform", __name__)
 
@@ -57,12 +54,9 @@ def create_tenant():
     tenant = tenant_result.data[0]
     try:
         tenant["registration_code"] = reset_tenant_registration_code(sb, tenant["id"])
-    except Exception as exc:
-        if "42703" in str(exc) and "registration_code" in str(exc):
-            tenant["registration_code"] = default_registration_code_for_tenant(tenant["id"])
-        else:
-            sb.table("tenants").delete().eq("id", tenant["id"]).execute()
-            return jsonify({"error": "Failed to create registration code"}), 500
+    except Exception:
+        sb.table("tenants").delete().eq("id", tenant["id"]).execute()
+        return jsonify({"error": "Failed to create registration code"}), 500
 
     try:
         auth_resp = sb.auth.admin.create_user(
