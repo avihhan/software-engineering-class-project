@@ -39,7 +39,7 @@ export default function Members() {
         <div className="empty-state"><p>Loading&hellip;</p></div>
       ) : members.length === 0 ? (
         <div className="empty-state">
-          <p>No members yet. Share your Organization ID to invite people.</p>
+          <p>No members yet. Share your Registration Code to invite people.</p>
         </div>
       ) : (
         <section className="dashboard-section">

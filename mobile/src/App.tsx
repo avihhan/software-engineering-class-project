@@ -14,6 +14,7 @@ const Goals = lazy(() => import('./pages/Goals'));
 const AIPlans = lazy(() => import('./pages/AIPlans'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const Billing = lazy(() => import('./pages/Billing'));
 
 function RouteFallback() {
   return (
@@ -51,6 +52,15 @@ export default function App() {
               <Route path="notifications" element={<Notifications />} />
               <Route path="profile" element={<Profile />} />
             </Route>
+
+            <Route
+              path="/billing"
+              element={
+                <ProtectedRoute>
+                  <Billing />
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

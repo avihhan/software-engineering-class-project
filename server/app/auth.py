@@ -3,6 +3,13 @@ from functools import wraps
 import jwt as pyjwt
 from flask import Blueprint, current_app, g, jsonify, request
 from supabase import Client, create_client
+from app.registration_code import (
+    default_registration_code_for_tenant,
+    is_valid_registration_code,
+    resolve_tenant_by_registration_code,
+    reset_tenant_registration_code,
+)
+from app.utils import PLATFORM_TENANT_ID
 
 bp = Blueprint("auth", __name__)
 
@@ -126,24 +133,22 @@ def signup():
     body = request.get_json(silent=True) or {}
     email = body.get("email", "").strip()
     password = body.get("password", "")
-    tenant_id = body.get("tenant_id")
+    registration_code = str(body.get("registration_code", "")).strip()
 
     if not email or not password:
         return jsonify({"error": "email and password are required"}), 400
-    if not tenant_id:
-        return jsonify({"error": "tenant_id is required"}), 400
+    if not registration_code:
+        return jsonify({"error": "registration_code is required"}), 400
+    if not is_valid_registration_code(registration_code):
+        return jsonify({"error": "registration_code must be a 6-digit numeric code"}), 400
 
     sb = get_supabase_admin()
 
-    tenant = (
-        sb.table("tenants")
-        .select("id")
-        .eq("id", tenant_id)
-        .maybe_single()
-        .execute()
-    )
-    if not tenant or not tenant.data:
-        return jsonify({"error": "Invalid tenant_id"}), 400
+    tenant = resolve_tenant_by_registration_code(sb, registration_code)
+    if not tenant:
+        return jsonify({"error": "Invalid registration code"}), 400
+
+    tenant_id = tenant["id"]
 
     try:
         auth_resp = sb.auth.admin.create_user(
@@ -329,16 +334,22 @@ def register_tenant():
     if existing and existing.data:
         return jsonify({"error": "A tenant with this email already exists"}), 409
 
-    tenant_result = (
-        sb.table("tenants")
-        .insert({"name": tenant_name, "email": email})
-        .execute()
-    )
+    tenant_result = sb.table("tenants").insert({"name": tenant_name, "email": email}).execute()
     if not tenant_result.data:
         return jsonify({"error": "Failed to create tenant"}), 500
 
     tenant = tenant_result.data[0]
     tenant_id = tenant["id"]
+    try:
+        registration_code = reset_tenant_registration_code(sb, tenant_id)
+    except Exception as exc:
+        # If migration 003 is not yet applied, still return a deterministic default code.
+        if "42703" in str(exc) and "registration_code" in str(exc):
+            registration_code = default_registration_code_for_tenant(tenant_id)
+        else:
+            sb.table("tenants").delete().eq("id", tenant_id).execute()
+            return jsonify({"error": "Failed to create registration code"}), 500
+    tenant["registration_code"] = registration_code
 
     try:
         auth_resp = sb.auth.admin.create_user(

@@ -1,5 +1,6 @@
 from flask import Blueprint, g, jsonify, request
 from app.auth import get_supabase_admin, require_auth
+from app.services.billing_service import get_member_billing_snapshot
 
 bp = Blueprint("users", __name__)
 
@@ -8,12 +9,26 @@ bp = Blueprint("users", __name__)
 @require_auth
 def get_user():
     sb = get_supabase_admin()
+    user_row = (
+        sb.table("users")
+        .select("created_at")
+        .eq("id", g.user_id)
+        .eq("tenant_id", g.tenant_id)
+        .maybe_single()
+        .execute()
+    )
     tenant_row = (
         sb.table("tenants")
         .select("id, name, logo_url, primary_color, secondary_color")
         .eq("id", g.tenant_id)
         .maybe_single()
         .execute()
+    )
+    billing_snapshot = get_member_billing_snapshot(
+        sb,
+        tenant_id=g.tenant_id,
+        user_id=g.user_id,
+        user_created_at=(user_row.data or {}).get("created_at"),
     )
     return jsonify(
         {
@@ -25,6 +40,12 @@ def get_user():
                 "role": g.role,
             },
             "tenant": tenant_row.data if tenant_row.data else None,
+            "billing_gate": {
+                "requires_payment": billing_snapshot["requires_payment"],
+                "billing_enabled": billing_snapshot["billing_enabled"],
+                "status": billing_snapshot["status"],
+                "trial_ends_at": billing_snapshot["trial_ends_at"],
+            },
         }
     )
 

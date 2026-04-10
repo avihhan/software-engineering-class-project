@@ -30,7 +30,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, tenantId: string) => Promise<void>;
+  signup: (email: string, password: string, registrationCode: string) => Promise<void>;
   registerTenant: (
     tenantName: string,
     email: string,
@@ -164,10 +164,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(
-    async (email: string, password: string, tenantId: string) => {
+    async (email: string, password: string, registrationCode: string) => {
       setState((s) => ({ ...s, loading: true }));
       try {
-        const data = await apiSignup(email, password, tenantId);
+        const data = await apiSignup(email, password, registrationCode);
         persistTokens(data.access_token, data.refresh_token);
 
         const me = await apiGetMe(data.access_token);

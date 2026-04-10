@@ -8,7 +8,7 @@ export default function Login() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantId, setTenantId] = useState('');
+  const [registrationCode, setRegistrationCode] = useState('');
   const [error, setError] = useState('');
 
   if (!initialized) {
@@ -36,8 +36,13 @@ export default function Login() {
       return;
     }
 
-    if (!isLogin && !tenantId.trim()) {
-      setError('Please enter your Organization ID.');
+    if (!isLogin && !registrationCode.trim()) {
+      setError('Please enter your 6-digit registration code.');
+      return;
+    }
+
+    if (!isLogin && !/^\d{6}$/.test(registrationCode.trim())) {
+      setError('Registration code must be 6 digits.');
       return;
     }
 
@@ -45,7 +50,7 @@ export default function Login() {
       if (isLogin) {
         await login(email.trim(), password);
       } else {
-        await signup(email.trim(), password, tenantId.trim());
+        await signup(email.trim(), password, registrationCode.trim());
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -93,13 +98,17 @@ export default function Login() {
 
           {!isLogin && (
             <div className="form-group">
-              <label htmlFor="tenantId">Organization ID</label>
+              <label htmlFor="registrationCode">Registration Code</label>
               <input
-                id="tenantId"
+                id="registrationCode"
                 type="text"
-                value={tenantId}
-                onChange={(e) => setTenantId(e.target.value)}
-                placeholder="From your coach or gym"
+                value={registrationCode}
+                onChange={(e) =>
+                  setRegistrationCode(e.target.value.replace(/[^\d]/g, '').slice(0, 6))
+                }
+                placeholder="6-digit code from your coach or gym"
+                inputMode="numeric"
+                pattern="\d{6}"
                 disabled={loading}
               />
             </div>

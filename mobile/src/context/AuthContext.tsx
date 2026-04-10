@@ -9,6 +9,7 @@ import {
 import {
   type User,
   type Tenant,
+  type BillingGate,
   apiLogin,
   apiSignup,
   apiLogout,
@@ -19,6 +20,7 @@ import {
 interface AuthState {
   user: User | null;
   tenant: Tenant | null;
+  billingGate: BillingGate | null;
   accessToken: string | null;
   loading: boolean;
   initialized: boolean;
@@ -26,7 +28,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, tenantId: string) => Promise<void>;
+  signup: (email: string, password: string, registrationCode: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -56,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
     tenant: null,
+    billingGate: null,
     accessToken: null,
     loading: false,
     initialized: false,
@@ -88,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setState({
             user: data.user,
             tenant: data.tenant,
+            billingGate: data.billing_gate ?? null,
             accessToken,
             loading: false,
             initialized: true,
@@ -103,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setState({
                 user: data.user,
                 tenant: data.tenant,
+                billingGate: data.billing_gate ?? null,
                 accessToken: refreshed.access_token,
                 loading: false,
                 initialized: true,
@@ -118,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setState({
             user: null,
             tenant: null,
+            billingGate: null,
             accessToken: null,
             loading: false,
             initialized: true,
@@ -140,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({
         user: data.user,
         tenant: data.tenant,
+        billingGate: data.billing_gate ?? null,
         accessToken: data.access_token,
         loading: false,
         initialized: true,
@@ -151,16 +158,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(
-    async (email: string, password: string, tenantId: string) => {
+    async (email: string, password: string, registrationCode: string) => {
       setState((s) => ({ ...s, loading: true }));
       try {
-        const data = await apiSignup(email, password, tenantId);
+        const data = await apiSignup(email, password, registrationCode);
         persistTokens(data.access_token, data.refresh_token);
 
         const me = await apiGetMe(data.access_token);
         setState({
           user: me.user,
           tenant: me.tenant,
+          billingGate: me.billing_gate ?? null,
           accessToken: data.access_token,
           loading: false,
           initialized: true,
@@ -181,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({
       user: null,
       tenant: null,
+      billingGate: null,
       accessToken: null,
       loading: false,
       initialized: true,

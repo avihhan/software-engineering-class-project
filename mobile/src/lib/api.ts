@@ -29,6 +29,7 @@ export interface LoginResponse {
   refresh_token: string;
   user: User;
   tenant: Tenant | null;
+  billing_gate?: BillingGate;
 }
 
 interface RefreshResponse {
@@ -89,15 +90,49 @@ export interface SignupResponse {
   user: User;
 }
 
+export interface BillingGate {
+  requires_payment: boolean;
+  billing_enabled: boolean;
+  status: string;
+  trial_ends_at: string | null;
+}
+
+export interface BillingSnapshot {
+  billing_enabled: boolean;
+  requires_payment: boolean;
+  status: string;
+  trial_days: number;
+  trial_ends_at: string | null;
+  now: string;
+  plan: {
+    name: string | null;
+    description: string | null;
+    offer_description: string | null;
+    price_cents: number | null;
+    currency: string;
+    discount_type: 'none' | 'percent' | 'amount';
+    discount_value: number | null;
+    effective_price_cents: number;
+  };
+  provider: {
+    name: string;
+    variant_id: string | null;
+  };
+  checkout: {
+    last_checkout_url: string | null;
+    last_checkout_at: string | null;
+  };
+}
+
 export async function apiSignup(
   email: string,
   password: string,
-  tenantId: string,
+  registrationCode: string,
 ): Promise<SignupResponse> {
   const res = await fetch(`${API_URL}/api/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, tenant_id: tenantId }),
+    body: JSON.stringify({ email, password, registration_code: registrationCode }),
   });
 
   const body = await res.json().catch(() => ({ error: 'Unexpected server error' }));
@@ -111,7 +146,7 @@ export async function apiSignup(
 
 export async function apiGetMe(
   accessToken: string,
-): Promise<{ user: User; tenant: Tenant | null }> {
+): Promise<{ user: User; tenant: Tenant | null; billing_gate?: BillingGate }> {
   const res = await fetch(`${API_URL}/api/users/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -119,6 +154,31 @@ export async function apiGetMe(
   if (!res.ok) throw new Error('Unauthorized');
 
   return res.json();
+}
+
+export async function apiGetBillingMe(
+  accessToken: string,
+): Promise<BillingSnapshot> {
+  const res = await apiFetch('/api/billing/me', accessToken);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.billing) {
+    throw new Error(body.error || 'Unable to load billing status');
+  }
+  return body.billing as BillingSnapshot;
+}
+
+export async function apiCreateBillingCheckout(
+  accessToken: string,
+): Promise<string> {
+  const res = await apiFetch('/api/billing/checkout', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.checkout_url) {
+    throw new Error(body.error || 'Unable to start checkout');
+  }
+  return body.checkout_url as string;
 }
 
 const TOKEN_KEY = 'aurafit_m_access_token';

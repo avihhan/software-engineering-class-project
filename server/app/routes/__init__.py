@@ -18,6 +18,7 @@ def register_routes(app: Flask):
     from app.routes.ai import bp as ai_bp
     from app.routes.streaks import bp as streaks_bp
     from app.routes.favorites import bp as favorites_bp
+    from app.routes.billing import bp as billing_bp
 
     app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(users_bp, url_prefix="/api")
@@ -34,3 +35,4 @@ def register_routes(app: Flask):
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
     app.register_blueprint(streaks_bp, url_prefix="/api")
     app.register_blueprint(favorites_bp, url_prefix="/api")
+    app.register_blueprint(billing_bp, url_prefix="/api")

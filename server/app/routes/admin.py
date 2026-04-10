@@ -1,7 +1,27 @@
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from app.auth import get_supabase_admin, require_auth, require_role
+from app.registration_code import (
+    default_registration_code_for_tenant,
+    ensure_tenant_registration_code,
+    reset_tenant_registration_code,
+)
+from app.services.billing_service import get_tenant_billing_config
 
 bp = Blueprint("admin", __name__)
+
+
+def _is_registration_code_missing_column(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "42703" in text and "registration_code" in text
+
+
+def _is_postgrest_missing_response(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "missing response" in text and "'code': '204'" in text
+
+
+def _can_use_branding_fallback(exc: Exception) -> bool:
+    return _is_registration_code_missing_column(exc) or _is_postgrest_missing_response(exc)
 
 
 @bp.route("/analytics", methods=["GET"])
@@ -68,13 +88,57 @@ def list_members():
 @require_role("owner")
 def get_branding():
     sb = get_supabase_admin()
-    result = (
-        sb.table("tenants")
-        .select("id, name, logo_url, primary_color, secondary_color, custom_domain")
-        .eq("id", g.tenant_id)
-        .maybe_single()
-        .execute()
-    )
+    try:
+        result = (
+            sb.table("tenants")
+            .select(
+                "id, name, logo_url, primary_color, secondary_color, custom_domain, registration_code"
+            )
+            .eq("id", g.tenant_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as exc:
+        # Fallbacks:
+        # - migration 003 not applied yet (registration_code column missing)
+        # - occasional postgrest-py "Missing response" bug (code 204)
+        if _can_use_branding_fallback(exc):
+            try:
+                result = (
+                    sb.table("tenants")
+                    .select("id, name, logo_url, primary_color, secondary_color, custom_domain")
+                    .eq("id", g.tenant_id)
+                    .maybe_single()
+                    .execute()
+                )
+                if result.data:
+                    result.data["registration_code"] = default_registration_code_for_tenant(
+                        g.tenant_id
+                    )
+                    return jsonify({"branding": result.data})
+            except Exception:
+                pass
+            # Last-resort response so settings UI does not hard-fail.
+            return jsonify(
+                {
+                    "branding": {
+                        "id": g.tenant_id,
+                        "name": "Organization",
+                        "logo_url": None,
+                        "primary_color": None,
+                        "secondary_color": None,
+                        "custom_domain": None,
+                        "registration_code": default_registration_code_for_tenant(
+                            g.tenant_id
+                        ),
+                    }
+                }
+            )
+        raise
+    if result.data:
+        result.data["registration_code"] = ensure_tenant_registration_code(
+            sb, g.tenant_id, result.data.get("registration_code")
+        )
     return jsonify({"branding": result.data})
 
 
@@ -99,7 +163,183 @@ def update_branding():
     )
     if not result.data:
         return jsonify({"error": "Update failed"}), 500
-    return jsonify({"branding": result.data[0]})
+    tenant = result.data[0]
+    current_code = tenant.get("registration_code")
+    if current_code is None:
+        try:
+            code_row = (
+                sb.table("tenants")
+                .select("registration_code")
+                .eq("id", g.tenant_id)
+                .maybe_single()
+                .execute()
+            )
+            current_code = (
+                code_row.data.get("registration_code") if code_row and code_row.data else None
+            )
+        except Exception as exc:
+            if _can_use_branding_fallback(exc):
+                current_code = default_registration_code_for_tenant(g.tenant_id)
+            else:
+                raise
+    tenant["registration_code"] = ensure_tenant_registration_code(
+        sb, g.tenant_id, current_code
+    )
+    return jsonify({"branding": tenant})
+
+
+@bp.route("/registration-code/reset", methods=["POST"])
+@require_auth
+@require_role("owner")
+def reset_registration_code():
+    sb = get_supabase_admin()
+    try:
+        new_code = reset_tenant_registration_code(sb, g.tenant_id)
+    except Exception as exc:
+        if _can_use_branding_fallback(exc):
+            # Fallback until migration 003 exists in DB.
+            return jsonify(
+                {"registration_code": default_registration_code_for_tenant(g.tenant_id)}
+            )
+        current_app.logger.exception("Failed to reset tenant registration code")
+        return (
+            jsonify(
+                {
+                    "error": "Unable to reset registration code. Ensure migration 003 is applied."
+                }
+            ),
+            500,
+        )
+    return jsonify({"registration_code": new_code})
+
+
+@bp.route("/billing", methods=["GET"])
+@require_auth
+@require_role("owner")
+def get_billing_settings():
+    sb = get_supabase_admin()
+    try:
+        return jsonify({"billing": get_tenant_billing_config(sb, g.tenant_id)})
+    except Exception:
+        current_app.logger.exception("Failed to fetch tenant billing settings")
+        # Return safe defaults so Settings page still works even if billing tables are missing.
+        return jsonify(
+            {
+                "billing": {
+                    "tenant_id": g.tenant_id,
+                    "provider": "lemon_squeezy",
+                    "enabled": False,
+                    "trial_days": 7,
+                    "store_id": None,
+                    "product_id": None,
+                    "variant_id": None,
+                    "plan_name": None,
+                    "plan_description": None,
+                    "offer_description": None,
+                    "price_cents": 0,
+                    "currency": "USD",
+                    "discount_type": "none",
+                    "discount_value": None,
+                },
+                "warning": "Billing config unavailable. Ensure migration 004 is applied.",
+            }
+        )
+
+
+@bp.route("/billing", methods=["PUT"])
+@require_auth
+@require_role("owner")
+def update_billing_settings():
+    body = request.get_json(silent=True) or {}
+    enabled = bool(body.get("enabled", False))
+    provider = (body.get("provider") or "lemon_squeezy").strip()
+    discount_type = (body.get("discount_type") or "none").strip()
+
+    if provider != "lemon_squeezy":
+        return jsonify({"error": "Only lemon_squeezy is supported right now"}), 400
+    if discount_type not in {"none", "percent", "amount"}:
+        return jsonify({"error": "discount_type must be none, percent, or amount"}), 400
+
+    try:
+        trial_days = int(body.get("trial_days", 7) or 7)
+    except (TypeError, ValueError):
+        return jsonify({"error": "trial_days must be an integer"}), 400
+    if trial_days < 0:
+        return jsonify({"error": "trial_days must be >= 0"}), 400
+
+    price_cents = body.get("price_cents")
+    if price_cents is not None:
+        try:
+            price_cents = int(price_cents)
+        except (TypeError, ValueError):
+            return jsonify({"error": "price_cents must be an integer"}), 400
+        if price_cents < 0:
+            return jsonify({"error": "price_cents must be >= 0"}), 400
+
+    discount_value = body.get("discount_value")
+    if discount_type == "percent" and discount_value is not None:
+        try:
+            discount_value = float(discount_value)
+        except (TypeError, ValueError):
+            return jsonify({"error": "discount_value must be numeric"}), 400
+        if discount_value < 0 or discount_value > 100:
+            return jsonify({"error": "discount_value for percent must be in [0, 100]"}), 400
+    elif discount_type == "amount" and discount_value is not None:
+        try:
+            discount_value = float(discount_value)
+        except (TypeError, ValueError):
+            return jsonify({"error": "discount_value must be numeric"}), 400
+        if discount_value < 0:
+            return jsonify({"error": "discount_value must be >= 0"}), 400
+    elif discount_type == "none":
+        discount_value = None
+
+    if enabled:
+        required_fields = ("store_id", "variant_id", "plan_name", "price_cents")
+        missing = [f for f in required_fields if body.get(f) in (None, "")]
+        if missing:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+
+    payload = {
+        "tenant_id": g.tenant_id,
+        "provider": provider,
+        "enabled": enabled,
+        "trial_days": trial_days,
+        "store_id": (body.get("store_id") or None),
+        "product_id": (body.get("product_id") or None),
+        "variant_id": (body.get("variant_id") or None),
+        "plan_name": (body.get("plan_name") or None),
+        "plan_description": (body.get("plan_description") or None),
+        "offer_description": (body.get("offer_description") or None),
+        "price_cents": price_cents,
+        "currency": (body.get("currency") or "USD").upper(),
+        "discount_type": discount_type,
+        "discount_value": discount_value,
+    }
+
+    sb = get_supabase_admin()
+    try:
+        existing = (
+            sb.table("tenant_billing_configs")
+            .select("id")
+            .eq("tenant_id", g.tenant_id)
+            .maybe_single()
+            .execute()
+        )
+        if existing.data:
+            sb.table("tenant_billing_configs").update(payload).eq(
+                "tenant_id", g.tenant_id
+            ).execute()
+        else:
+            sb.table("tenant_billing_configs").insert(payload).execute()
+
+        return jsonify({"billing": get_tenant_billing_config(sb, g.tenant_id)})
+    except Exception:
+        current_app.logger.exception("Failed to update tenant billing settings")
+        return (
+            jsonify({"error": "Unable to save billing settings. Ensure migration 004 is applied."}),
+            500,
+        )
 
 
 @bp.route("/members/<int:member_id>/report", methods=["GET"])

@@ -100,12 +100,12 @@ export interface SignupResponse {
 export async function apiSignup(
   email: string,
   password: string,
-  tenantId: string,
+  registrationCode: string,
 ): Promise<SignupResponse> {
   const res = await fetch(`${API_URL}/api/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, tenant_id: tenantId }),
+    body: JSON.stringify({ email, password, registration_code: registrationCode }),
   });
 
   const body = await res.json().catch(() => ({ error: 'Unexpected server error' }));
