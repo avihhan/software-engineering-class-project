@@ -89,6 +89,44 @@ def list_members():
     return jsonify({"members": result.data or []})
 
 
+@bp.route("/members/<int:member_id>/verify", methods=["POST"])
+@require_auth
+@require_role("owner")
+def verify_member(member_id):
+    """Mark a tenant member as email-verified."""
+    sb = get_supabase_admin()
+
+    current = (
+        sb.table("users")
+        .select("id, email, role, is_email_verified, created_at")
+        .eq("id", member_id)
+        .eq("tenant_id", g.tenant_id)
+        .maybe_single()
+        .execute()
+    )
+    if not current or not current.data:
+        return jsonify({"error": "Member not found"}), 404
+    if current.data.get("role") != "member":
+        return jsonify({"error": "Only members can be verified"}), 400
+
+    if current.data.get("is_email_verified"):
+        return jsonify({"member": current.data})
+
+    updated = (
+        sb.table("users")
+        .update({"is_email_verified": True})
+        .eq("id", member_id)
+        .eq("tenant_id", g.tenant_id)
+        .select("id, email, role, is_email_verified, created_at")
+        .maybe_single()
+        .execute()
+    )
+    if not updated or not updated.data:
+        return jsonify({"error": "Unable to verify member"}), 500
+
+    return jsonify({"member": updated.data})
+
+
 @bp.route("/branding", methods=["GET"])
 @require_auth
 @require_role("owner")

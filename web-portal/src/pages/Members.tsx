@@ -15,6 +15,7 @@ export default function Members() {
   const { accessToken } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verifyingMemberId, setVerifyingMemberId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -24,6 +25,24 @@ export default function Members() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [accessToken]);
+
+  async function handleVerify(memberId: number) {
+    if (!accessToken || verifyingMemberId === memberId) return;
+    setVerifyingMemberId(memberId);
+    try {
+      const res = await apiFetch(`/api/admin/members/${memberId}/verify`, accessToken, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.member) return;
+
+      setMembers((prev) =>
+        prev.map((m) => (m.id === memberId ? { ...m, is_email_verified: true } : m)),
+      );
+    } finally {
+      setVerifyingMemberId(null);
+    }
+  }
 
   return (
     <div className="dashboard">
@@ -61,9 +80,22 @@ export default function Members() {
                   <td>{m.is_email_verified ? 'Yes' : 'No'}</td>
                   <td>{new Date(m.created_at).toLocaleDateString()}</td>
                   <td>
-                    <Link to={`/members/${m.id}/report`} className="report-link">
-                      Report
-                    </Link>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <Link to={`/members/${m.id}/report`} className="report-link">
+                        Report
+                      </Link>
+                      {!m.is_email_verified && (
+                        <button
+                          type="button"
+                          className="login-btn"
+                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                          onClick={() => handleVerify(m.id)}
+                          disabled={verifyingMemberId === m.id}
+                        >
+                          {verifyingMemberId === m.id ? 'Verifying…' : 'Verify'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
