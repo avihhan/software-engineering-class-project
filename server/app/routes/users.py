@@ -11,7 +11,7 @@ def get_user():
     sb = get_supabase_admin()
     user_row = (
         sb.table("users")
-        .select("created_at")
+        .select("created_at, is_email_verified")
         .eq("id", g.user_id)
         .eq("tenant_id", g.tenant_id)
         .maybe_single()
@@ -38,6 +38,8 @@ def get_user():
                 "email": g.email,
                 "tenant_id": g.tenant_id,
                 "role": g.role,
+                "is_email_verified": (user_row.data or {}).get("is_email_verified", False),
+                "created_at": (user_row.data or {}).get("created_at"),
             },
             "tenant": tenant_row.data if tenant_row.data else None,
             "billing_gate": {

@@ -29,7 +29,7 @@ interface StreakData {
 }
 
 export default function Dashboard() {
-  const { user, accessToken } = useAuth();
+  const { user, tenant, accessToken } = useAuth();
   const [recentMeals, setRecentMeals] = useState<NutritionLog[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [streak, setStreak] = useState<StreakData | null>(null);
@@ -127,6 +127,11 @@ export default function Dashboard() {
         <h1>
           Hey{user?.email ? `, ${user.email.split('@')[0]}` : ''}
         </h1>
+        {tenant?.name && (
+          <p className="text-muted" style={{ marginBottom: '0.2rem' }}>
+            {tenant.name}
+          </p>
+        )}
         <p className="text-muted">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
       </header>
 

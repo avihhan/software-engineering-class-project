@@ -84,17 +84,20 @@ export default function Members() {
                       <Link to={`/members/${m.id}/report`} className="report-link">
                         Report
                       </Link>
-                      {!m.is_email_verified && (
-                        <button
-                          type="button"
-                          className="login-btn"
-                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
-                          onClick={() => handleVerify(m.id)}
-                          disabled={verifyingMemberId === m.id}
-                        >
-                          {verifyingMemberId === m.id ? 'Verifying…' : 'Verify'}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className="login-btn"
+                        style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                        onClick={() => handleVerify(m.id)}
+                        disabled={m.is_email_verified || verifyingMemberId === m.id}
+                        title={m.is_email_verified ? 'Member is already verified' : 'Verify member'}
+                      >
+                        {m.is_email_verified
+                          ? 'Verified'
+                          : verifyingMemberId === m.id
+                            ? 'Verifying…'
+                            : 'Verify'}
+                      </button>
                     </div>
                   </td>
                 </tr>
