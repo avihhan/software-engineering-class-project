@@ -45,16 +45,22 @@ export default function Billing() {
       ),
     [billing],
   );
+  const isAlreadyActive = billing?.status === 'active' || billing?.status === 'paid';
 
   async function handleCheckout() {
-    if (!accessToken || !billing) return;
+    if (!accessToken || !billing || isAlreadyActive) return;
     setStartingCheckout(true);
     setError('');
     try {
       const checkoutUrl = await apiCreateBillingCheckout(accessToken);
       window.location.href = checkoutUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start checkout');
+      const msg = err instanceof Error ? err.message : 'Unable to start checkout';
+      if (msg.toLowerCase().includes('already active')) {
+        setError('Your subscription is already active.');
+      } else {
+        setError(msg);
+      }
       setStartingCheckout(false);
     }
   }
@@ -100,12 +106,20 @@ export default function Billing() {
             <button
               type="button"
               className="login-btn"
-              disabled={startingCheckout || !billing?.billing_enabled}
+              disabled={startingCheckout || !billing?.billing_enabled || isAlreadyActive}
               onClick={handleCheckout}
             >
-              {startingCheckout ? 'Redirecting…' : 'Continue to Payment'}
+              {isAlreadyActive
+                ? 'Subscription Active'
+                : startingCheckout
+                  ? 'Redirecting…'
+                  : 'Continue to Payment'}
             </button>
-            {!billing?.requires_payment && (
+            {isAlreadyActive ? (
+              <p className="form-hint" style={{ marginTop: '0.5rem' }}>
+                Your subscription is active. No payment is required right now.
+              </p>
+            ) : !billing?.requires_payment && (
               <p className="form-hint" style={{ marginTop: '0.5rem' }}>
                 Your trial may still be active, but you can prepay now.
               </p>
