@@ -38,6 +38,37 @@ def _body_metrics_insert_with_fallback(sb, row: dict):
         return sb.table("body_metrics").insert(legacy_row).execute()
 
 
+def _latest_metric_defaults(sb, tenant_id: int, user_id: int) -> dict:
+    try:
+        result = (
+            sb.table("body_metrics")
+            .select("weight,height,height_feet,height_inches,body_fat_percentage")
+            .eq("tenant_id", tenant_id)
+            .eq("user_id", user_id)
+            .order("recorded_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0] if rows else {}
+    except Exception as exc:
+        if _is_missing_column_error(exc, "height_feet") or _is_missing_column_error(
+            exc, "height_inches"
+        ):
+            fallback = (
+                sb.table("body_metrics")
+                .select("weight,height,body_fat_percentage")
+                .eq("tenant_id", tenant_id)
+                .eq("user_id", user_id)
+                .order("recorded_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = fallback.data or []
+            return rows[0] if rows else {}
+        raise
+
+
 def _body_metrics_update_with_fallback(sb, metric_id: int, tenant_id: int, user_id: int, allowed: dict):
     try:
         return (
@@ -170,6 +201,33 @@ def create_body_metric():
         row["body_fat_percentage"] = body["body_fat_percentage"]
 
     sb = get_supabase_admin()
+    previous = _latest_metric_defaults(sb, g.tenant_id, g.user_id)
+
+    if "weight" not in row and previous.get("weight") not in (None, ""):
+        row["weight"] = previous.get("weight")
+
+    has_explicit_height = (
+        height_feet is not None
+        or height_inches is not None
+        or legacy_height is not None
+    )
+    if not has_explicit_height and previous:
+        prev_feet = previous.get("height_feet")
+        prev_inches = previous.get("height_inches")
+        prev_height = previous.get("height")
+        if prev_feet is not None or prev_inches is not None:
+            row["height_feet"] = prev_feet
+            row["height_inches"] = prev_inches
+            row["height"] = float((prev_feet or 0) * 12 + (prev_inches or 0))
+        elif prev_height not in (None, ""):
+            row["height"] = prev_height
+
+    if "body_fat_percentage" not in row and previous.get("body_fat_percentage") not in (
+        None,
+        "",
+    ):
+        row["body_fat_percentage"] = previous.get("body_fat_percentage")
+
     result = _body_metrics_insert_with_fallback(sb, row)
 
     if not result.data:

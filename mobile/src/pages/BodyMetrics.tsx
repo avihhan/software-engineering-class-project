@@ -45,12 +45,14 @@ export default function BodyMetrics() {
 
   function fetchMetrics() {
     if (!accessToken) return;
+    let hadCached = false;
     const cached = getApiCache<{ body_metrics?: Metric[] }>(
       '/api/body-metrics',
       accessToken,
       45000,
     );
     if (cached) {
+      hadCached = true;
       setMetrics(cached.data.body_metrics ?? []);
       setLoading(false);
     }
@@ -61,7 +63,15 @@ export default function BodyMetrics() {
     })
       .then((d) => setMetrics(d.body_metrics ?? []))
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Unable to load body metrics');
+        const message = err instanceof Error ? err.message : 'Unable to load body metrics';
+        const lower = message.toLowerCase();
+        const isAbortLike =
+          lower.includes('aborted') ||
+          lower.includes('aborterror') ||
+          lower.includes('signal is aborted');
+        if (!isAbortLike || !hadCached) {
+          setError(message);
+        }
       })
       .finally(() => setLoading(false));
   }
@@ -83,7 +93,19 @@ export default function BodyMetrics() {
           setEditingQuestionnaire(true);
         }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load questionnaire'));
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'Unable to load questionnaire';
+        const lower = message.toLowerCase();
+        if (
+          !(
+            lower.includes('aborted') ||
+            lower.includes('aborterror') ||
+            lower.includes('signal is aborted')
+          )
+        ) {
+          setError(message);
+        }
+      });
   }, [accessToken]);
 
   async function handleSubmit(e: FormEvent) {
