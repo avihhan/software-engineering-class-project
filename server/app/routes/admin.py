@@ -816,6 +816,7 @@ def send_weekly_summaries():
     skipped_count = 0
     failed_count = 0
     errors: list[dict] = []
+    provider_counts: dict[str, int] = {}
     members_list = members.data or []
 
     for m in members_list:
@@ -848,18 +849,33 @@ def send_weekly_summaries():
                     "secondary_color": tenant_data.get("secondary_color"),
                 },
             )
+            provider = (result.get("provider") or "unknown").strip() or "unknown"
+            provider_counts[provider] = provider_counts.get(provider, 0) + 1
             if result.get("sent"):
                 sent_count += 1
             else:
                 failed_count += 1
+                current_app.logger.warning(
+                    "Weekly summary send failed tenant=%s email=%s provider=%s detail=%s",
+                    g.tenant_id,
+                    member_email,
+                    provider,
+                    result.get("detail"),
+                )
                 errors.append(
                     {
                         "email": member_email,
+                        "provider": provider,
                         "error": result.get("detail") or "send failed",
                     }
                 )
         except Exception as exc:
             failed_count += 1
+            current_app.logger.exception(
+                "Weekly summary send crashed tenant=%s email=%s",
+                g.tenant_id,
+                member_email,
+            )
             errors.append({"email": member_email, "error": str(exc)})
 
     return jsonify(
@@ -872,6 +888,7 @@ def send_weekly_summaries():
             "failed": failed_count,
             "skipped": skipped_count,
             "total_members": len(members_list),
+            "providers": provider_counts,
             "errors": errors[:10],
         }
     )

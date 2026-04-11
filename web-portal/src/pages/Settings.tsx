@@ -453,13 +453,24 @@ export default function Settings() {
       const total = Number(data.total_members ?? 0);
       const skipped = Number(data.skipped ?? 0);
       const failed = Number(data.failed ?? 0);
+      const providers = data.providers && typeof data.providers === 'object'
+        ? Object.entries(data.providers)
+            .map(([k, v]) => `${k}:${String(v)}`)
+            .join(', ')
+        : '';
+      const firstError =
+        Array.isArray(data.errors) && data.errors.length > 0
+          ? data.errors[0]?.error || 'unknown error'
+          : '';
       setSummaryStatus(
-        `Weekly summaries: sent ${sent}/${total} (skipped ${skipped}, failed ${failed})`,
+        failed > 0
+          ? `Weekly summaries: sent ${sent}/${total} (skipped ${skipped}, failed ${failed})${providers ? ` [${providers}]` : ''}. First error: ${firstError}`
+          : `Weekly summaries: sent ${sent}/${total} (skipped ${skipped}, failed ${failed})${providers ? ` [${providers}]` : ''}`,
       );
     } catch (err) {
       setSummaryStatus(err instanceof Error ? err.message : 'Failed to send');
     }
-    setTimeout(() => setSummaryStatus(''), 5000);
+    setTimeout(() => setSummaryStatus(''), 12000);
   }
 
   async function handleResetRegistrationCode() {

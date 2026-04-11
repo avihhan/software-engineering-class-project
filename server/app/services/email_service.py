@@ -46,6 +46,8 @@ def _smtp_config() -> dict[str, Any] | None:
         or os.getenv("SMTP_PASS", "").strip()
         or os.getenv("GMAIL_APP_PASSWORD", "").strip()
     )
+    if password:
+        password = password.replace(" ", "")
     if not host or not username or not password:
         return None
     try:
@@ -89,9 +91,12 @@ def send_email(*, to: str, subject: str, html_body: str) -> dict[str, Any]:
     Send a single email. Returns {"sent": True/False, "detail": ...}.
     Falls back to console logging when SendGrid is not configured.
     """
+    smtp = _smtp_config()
+    if smtp is not None:
+        return _send_smtp(to=to, subject=subject, html_body=html_body, config=smtp)
+
     client, helpers = _sendgrid_client()
     from_email = os.getenv("SENDGRID_FROM_EMAIL", "burnerwill111@gmail.com")
-
     if client is not None:
         mail = helpers["Mail"](
             from_email=helpers["Email"](from_email),
@@ -104,10 +109,6 @@ def send_email(*, to: str, subject: str, html_body: str) -> dict[str, Any]:
             return {"sent": True, "status_code": response.status_code, "provider": "sendgrid"}
         except Exception as exc:
             return {"sent": False, "detail": str(exc), "provider": "sendgrid"}
-
-    smtp = _smtp_config()
-    if smtp is not None:
-        return _send_smtp(to=to, subject=subject, html_body=html_body, config=smtp)
 
     print(f"[EMAIL-DEV] To={to}  Subject={subject}")
     print(f"[EMAIL-DEV] Body preview: {html_body[:200]}")
