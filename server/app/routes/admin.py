@@ -101,6 +101,26 @@ def _resolve_week_window(body: dict) -> tuple[date, date]:
     return start_date, end_date
 
 
+def _resolve_clients_report_window(args) -> tuple[date, date]:
+    """Resolve dashboard clients report window (inclusive), default 30 days."""
+    today = date.today()
+    default_start = today - timedelta(days=29)
+
+    start_raw = (args.get("start_date") or "").strip()
+    end_raw = (args.get("end_date") or "").strip()
+
+    try:
+        start_date = date.fromisoformat(start_raw) if start_raw else default_start
+        end_date = date.fromisoformat(end_raw) if end_raw else today
+    except ValueError:
+        start_date = default_start
+        end_date = today
+
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    return start_date, end_date
+
+
 def _status_value(raw: str | None) -> str:
     return (raw or "").strip().lower()
 
@@ -246,6 +266,107 @@ def _build_member_weekly_summary(sb, tenant_id: int, member_id: int, start_date:
             "open_goals": open_count,
             "completed_goals": completed_count,
             "started_this_week": started_this_week,
+        },
+    }
+
+
+def _build_member_dashboard_report(
+    sb,
+    *,
+    tenant_id: int,
+    member_id: int,
+    member_email: str,
+    member_created_at: str | None,
+    start_date: date,
+    end_date: date,
+):
+    start_iso = start_date.isoformat()
+    end_iso = end_date.isoformat()
+    start_dt_iso = datetime.combine(start_date, time.min).isoformat()
+    end_dt_iso = datetime.combine(end_date, time.max).isoformat()
+
+    workouts_result = (
+        sb.table("workout_logs")
+        .select("workout_date")
+        .eq("tenant_id", tenant_id)
+        .eq("user_id", member_id)
+        .gte("workout_date", start_iso)
+        .lte("workout_date", end_iso)
+        .order("workout_date", desc=True)
+        .execute()
+    )
+    workout_rows = workouts_result.data or []
+    workout_dates = [w.get("workout_date") for w in workout_rows if w.get("workout_date")]
+    workout_active_days = len(set(workout_dates))
+    latest_workout_date = workout_dates[0] if workout_dates else None
+
+    nutrition_result = (
+        sb.table("nutrition_logs")
+        .select("calories, protein")
+        .eq("tenant_id", tenant_id)
+        .eq("user_id", member_id)
+        .gte("logged_at", start_dt_iso)
+        .lte("logged_at", end_dt_iso)
+        .execute()
+    )
+    nutrition_rows = nutrition_result.data or []
+    avg_calories = _avg([v for v in [_to_num(n.get("calories")) for n in nutrition_rows] if v is not None])
+    avg_protein = _avg([v for v in [_to_num(n.get("protein")) for n in nutrition_rows] if v is not None])
+
+    body_result = (
+        sb.table("body_metrics")
+        .select("weight, body_fat_percentage, recorded_at")
+        .eq("tenant_id", tenant_id)
+        .eq("user_id", member_id)
+        .gte("recorded_at", start_dt_iso)
+        .lte("recorded_at", end_dt_iso)
+        .order("recorded_at", desc=True)
+        .execute()
+    )
+    body_rows = body_result.data or []
+    latest_body = body_rows[0] if body_rows else {}
+    first_body = body_rows[-1] if body_rows else {}
+    latest_weight = _to_num(latest_body.get("weight"))
+    latest_body_fat = _to_num(latest_body.get("body_fat_percentage"))
+    weight_change = _delta(_to_num(first_body.get("weight")), latest_weight)
+
+    goals_result = (
+        sb.table("goals")
+        .select("status")
+        .eq("tenant_id", tenant_id)
+        .eq("user_id", member_id)
+        .execute()
+    )
+    goals_rows = goals_result.data or []
+    completed_statuses = {"completed", "done", "achieved"}
+    completed_goals = sum(
+        1 for g in goals_rows if _status_value(g.get("status")) in completed_statuses
+    )
+    open_goals = max(len(goals_rows) - completed_goals, 0)
+
+    return {
+        "id": member_id,
+        "email": member_email,
+        "created_at": member_created_at,
+        "workouts": {
+            "count": len(workout_rows),
+            "active_days": workout_active_days,
+            "latest_date": latest_workout_date,
+        },
+        "nutrition": {
+            "log_count": len(nutrition_rows),
+            "avg_calories": avg_calories,
+            "avg_protein_g": avg_protein,
+        },
+        "body_metrics": {
+            "latest_weight_lbs": latest_weight,
+            "latest_body_fat_pct": latest_body_fat,
+            "weight_change_lbs": weight_change,
+        },
+        "goals": {
+            "open": open_goals,
+            "completed": completed_goals,
+            "total": len(goals_rows),
         },
     }
 
@@ -781,6 +902,89 @@ def member_report(member_id):
         "nutrition": nutrition.data or [],
         "goals": goals.data or [],
     })
+
+
+@bp.route("/reports/clients", methods=["GET"])
+@require_auth
+@require_role("owner")
+def clients_report():
+    """Return tenant-scoped combined client stats for dashboard PDF."""
+    start_date, end_date = _resolve_clients_report_window(request.args)
+    sb = get_supabase_admin()
+
+    members_result = (
+        sb.table("users")
+        .select("id, email, created_at")
+        .eq("tenant_id", g.tenant_id)
+        .eq("role", "member")
+        .order("created_at", desc=False)
+        .execute()
+    )
+    members = members_result.data or []
+
+    tenant_result = (
+        sb.table("tenants")
+        .select("name, logo_url, primary_color, secondary_color")
+        .eq("id", g.tenant_id)
+        .maybe_single()
+        .execute()
+    )
+    tenant_data = tenant_result.data or {}
+
+    member_reports = []
+    for m in members:
+        member_id = m.get("id")
+        member_email = (m.get("email") or "").strip()
+        if member_id is None or not member_email:
+            continue
+        try:
+            member_reports.append(
+                _build_member_dashboard_report(
+                    sb,
+                    tenant_id=g.tenant_id,
+                    member_id=member_id,
+                    member_email=member_email,
+                    member_created_at=m.get("created_at"),
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            )
+        except Exception:
+            current_app.logger.exception(
+                "Failed to aggregate dashboard report for tenant=%s member=%s",
+                g.tenant_id,
+                member_email,
+            )
+
+    totals = {
+        "members": len(member_reports),
+        "workouts": sum((r.get("workouts", {}).get("count") or 0) for r in member_reports),
+        "nutrition_logs": sum(
+            (r.get("nutrition", {}).get("log_count") or 0) for r in member_reports
+        ),
+        "goals_open": sum((r.get("goals", {}).get("open") or 0) for r in member_reports),
+        "goals_completed": sum(
+            (r.get("goals", {}).get("completed") or 0) for r in member_reports
+        ),
+    }
+
+    return jsonify(
+        {
+            "tenant": {
+                "id": g.tenant_id,
+                "name": tenant_data.get("name") or "Organization",
+                "logo_url": tenant_data.get("logo_url"),
+                "primary_color": tenant_data.get("primary_color"),
+                "secondary_color": tenant_data.get("secondary_color"),
+            },
+            "window": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+            },
+            "totals": totals,
+            "members": member_reports,
+        }
+    )
 
 
 @bp.route("/weekly-summary", methods=["POST"])

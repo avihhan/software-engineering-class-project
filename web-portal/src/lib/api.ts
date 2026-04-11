@@ -186,6 +186,54 @@ export interface UploadSignResponse {
   public_url: string | null;
 }
 
+export interface ClientsReportMember {
+  id: number;
+  email: string;
+  created_at: string | null;
+  workouts: {
+    count: number;
+    active_days: number;
+    latest_date: string | null;
+  };
+  nutrition: {
+    log_count: number;
+    avg_calories: number | null;
+    avg_protein_g: number | null;
+  };
+  body_metrics: {
+    latest_weight_lbs: number | null;
+    latest_body_fat_pct: number | null;
+    weight_change_lbs: number | null;
+  };
+  goals: {
+    open: number;
+    completed: number;
+    total: number;
+  };
+}
+
+export interface ClientsReportResponse {
+  tenant: {
+    id: number;
+    name: string;
+    logo_url: string | null;
+    primary_color: string | null;
+    secondary_color: string | null;
+  };
+  window: {
+    start_date: string;
+    end_date: string;
+  };
+  totals: {
+    members: number;
+    workouts: number;
+    nutrition_logs: number;
+    goals_open: number;
+    goals_completed: number;
+  };
+  members: ClientsReportMember[];
+}
+
 export async function apiOwnerGetFeedPosts(
   accessToken: string,
 ): Promise<FeedPost[]> {
@@ -261,6 +309,25 @@ export async function apiOwnerCreateBrandingLogoUploadSignUrl(
     throw new Error(body.error || 'Unable to create logo upload URL');
   }
   return body as UploadSignResponse;
+}
+
+export async function apiOwnerGetClientsReport(
+  accessToken: string,
+  params: { startDate?: string; endDate?: string } = {},
+): Promise<ClientsReportResponse> {
+  const query = new URLSearchParams();
+  if (params.startDate) query.set('start_date', params.startDate);
+  if (params.endDate) query.set('end_date', params.endDate);
+  const qs = query.toString();
+  const res = await apiFetch(
+    `/api/admin/reports/clients${qs ? `?${qs}` : ''}`,
+    accessToken,
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Unable to load clients report');
+  }
+  return body as ClientsReportResponse;
 }
 
 const TOKEN_KEY = 'aurafit_access_token';
