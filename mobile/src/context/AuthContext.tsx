@@ -38,10 +38,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const TOKEN_KEY = 'aurafit_m_access_token';
 const REFRESH_KEY = 'aurafit_m_refresh_token';
 const BRANDING_KEY = 'aurafit_m_tenant_branding';
-const DEFAULT_PRIMARY = '#6c63ff';
-const DEFAULT_SECONDARY = '#1a1a2e';
-const DEFAULT_BACKGROUND = '#0b0b14';
-const DEFAULT_WIDGET_BACKGROUND = 'rgba(26, 26, 46, 0.7)';
+const DEFAULT_PRIMARY = '#333333';
+const DEFAULT_SECONDARY = '#f5f5f5';
+const DEFAULT_BACKGROUND = '#ffffff';
+const DEFAULT_WIDGET_BACKGROUND = '#f5f5f5';
 
 function persistTokens(access: string, refresh: string) {
   localStorage.setItem(TOKEN_KEY, access);

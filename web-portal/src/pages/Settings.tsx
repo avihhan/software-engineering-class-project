@@ -49,10 +49,10 @@ export default function Settings() {
   const [logoUrl, setLogoUrl] = useState('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
-  const [primaryColor, setPrimaryColor] = useState('#6c63ff');
-  const [secondaryColor, setSecondaryColor] = useState('#1a1a2e');
-  const [backgroundColor, setBackgroundColor] = useState('#0b0b14');
-  const [widgetBackgroundColor, setWidgetBackgroundColor] = useState('#1a1a2e');
+  const [primaryColor, setPrimaryColor] = useState('#333333');
+  const [secondaryColor, setSecondaryColor] = useState('#f5f5f5');
+  const [backgroundColor, setBackgroundColor] = useState('#ffffff');
+  const [widgetBackgroundColor, setWidgetBackgroundColor] = useState('#f5f5f5');
   const [registrationCode, setRegistrationCode] = useState('');
   const [resettingCode, setResettingCode] = useState(false);
   const [codeStatus, setCodeStatus] = useState('');
@@ -93,10 +93,10 @@ export default function Settings() {
           setBranding(b);
           setName(b.name ?? '');
           setLogoUrl(b.logo_url ?? '');
-          setPrimaryColor(b.primary_color ?? '#6c63ff');
-          setSecondaryColor(b.secondary_color ?? '#1a1a2e');
-          setBackgroundColor(b.background_color ?? '#0b0b14');
-          setWidgetBackgroundColor(b.widget_background_color ?? '#1a1a2e');
+          setPrimaryColor(b.primary_color ?? '#333333');
+          setSecondaryColor(b.secondary_color ?? '#f5f5f5');
+          setBackgroundColor(b.background_color ?? '#ffffff');
+          setWidgetBackgroundColor(b.widget_background_color ?? '#f5f5f5');
           setRegistrationCode(b.registration_code ?? '');
         }
       })

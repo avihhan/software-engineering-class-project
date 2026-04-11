@@ -3,17 +3,17 @@
 }
 
 :root {
-  --bg: #0b0b14;
-  --bg-card: rgba(26, 26, 46, 0.7);
-  --border: rgba(255, 255, 255, 0.06);
-  --text: #e2e8f0;
-  --text-dim: #94a3b8;
-  --text-muted: #64748b;
-  --tenant-primary: #6c63ff;
-  --tenant-secondary: #1a1a2e;
-  --tenant-primary-rgb: 108, 99, 255;
-  --accent: #6c63ff;
-  --accent-light: #a5b4fc;
+  --bg: #ffffff;
+  --bg-card: #f5f5f5;
+  --border: #e5e5e5;
+  --text: #333333;
+  --text-dim: #666666;
+  --text-muted: #888888;
+  --tenant-primary: #333333;
+  --tenant-secondary: #f5f5f5;
+  --tenant-primary-rgb: 51, 51, 51;
+  --accent: #333333;
+  --accent-light: #5a5a5a;
   --danger: #ef4444;
   --sidebar-width-mobile: 72px;
   --sidebar-width: 252px;
@@ -81,7 +81,7 @@ body {
   justify-content: center;
   font-size: 1.25rem;
   font-weight: 700;
-  color: #fff;
+  color: #ffffff;
 }
 
 .brand-logo-img {
@@ -127,7 +127,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 2rem 1.5rem;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
 }
 
 .login-brand {
@@ -153,7 +153,7 @@ body {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .login-brand p {
@@ -187,10 +187,10 @@ body {
 
 .form-group input {
   padding: 0.7rem 0.875rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #fff;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  color: #fff;
+  color: var(--text);
   font-size: 1rem;
   font-family: inherit;
   outline: none;
@@ -295,7 +295,7 @@ body {
   justify-content: flex-start;
   align-items: center;
   gap: 0.35rem;
-  background: #111122;
+  background: var(--bg-card);
   border-right: 1px solid var(--border);
   padding: 0.75rem 0.4rem;
   z-index: 100;
@@ -381,7 +381,7 @@ body {
   margin: 0;
   font-size: 1.375rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .dashboard-tenant-brand {
@@ -444,7 +444,7 @@ body {
 .card-value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 /* --------------------------------------------------------
@@ -844,7 +844,7 @@ body {
   margin: 0;
   padding: 0 1rem;
   font-size: 1rem;
-  color: #fff;
+  color: var(--text);
 }
 
 .feed-post-body {
@@ -852,7 +852,7 @@ body {
   padding: 0 1rem;
   white-space: pre-wrap;
   line-height: 1.45;
-  color: #e2e8f0;
+  color: var(--text);
 }
 
 .feed-post-media-wrap {
@@ -1053,7 +1053,7 @@ body {
 
 .nutrition-ring-value strong {
   font-size: 1.55rem;
-  color: #fff;
+  color: var(--text);
   line-height: 1;
 }
 
@@ -1497,7 +1497,7 @@ body {
   }
 
   .mobile-brand__text strong {
-    color: #fff;
+    color: var(--text);
     font-size: 0.95rem;
   }
 
@@ -1519,7 +1519,7 @@ body {
     padding: 0.85rem 0.6rem 1rem;
     border-right: 1px solid var(--border);
     border-top: none;
-    background: #10101d;
+    background: var(--bg-card);
     overflow-y: auto;
     scrollbar-width: thin;
   }
@@ -1552,7 +1552,7 @@ body {
 
   .tab:hover {
     color: var(--text);
-    background: rgba(255, 255, 255, 0.04);
+    background: #ececec;
   }
 
   .tab--active {
