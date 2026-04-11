@@ -10,6 +10,13 @@ import {
 } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
+function isVideoPost(post: FeedPost): boolean {
+  const mime = (post.media_mime || '').toLowerCase();
+  if (mime.startsWith('video/')) return true;
+  const url = (post.media_url || '').toLowerCase();
+  return /\.(mp4|webm|mov|m4v|avi)(\?|$)/.test(url) || post.type === 'video';
+}
+
 export default function ContentFeed() {
   const { accessToken } = useAuth();
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -111,6 +118,25 @@ export default function ContentFeed() {
     }
   }
 
+  function renderMedia(post: FeedPost) {
+    if (!post.media_url) return null;
+    if (isVideoPost(post)) {
+      return (
+        <div className="feed-post-media-wrap">
+          <video className="feed-post-media" controls preload="metadata">
+            <source src={post.media_url} type={post.media_mime || undefined} />
+            Your browser does not support video playback.
+          </video>
+        </div>
+      );
+    }
+    return (
+      <div className="feed-post-media-wrap">
+        <img className="feed-post-media" src={post.media_url} alt={post.title || 'Feed media'} loading="lazy" />
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -131,59 +157,62 @@ export default function ContentFeed() {
           <p className="empty-text">No content posted yet.</p>
         </section>
       ) : (
-        <div style={{ display: 'grid', gap: '1rem' }}>
+        <div className="feed-list">
           {posts.map((post) => {
             const comments = commentsByPost[post.id] || [];
             const commentsOpen = activeCommentsPostId === post.id;
             return (
-              <section key={post.id} className="section">
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.5rem' }}>
-                  <strong style={{ fontSize: '0.875rem' }}>{post.title || 'Update'}</strong>
-                  <span className="text-muted" style={{ fontSize: '0.75rem' }}>
-                    {new Date(post.created_at).toLocaleString()}
-                  </span>
+              <section key={post.id} className="feed-post">
+                <div className="feed-post-header">
+                  <div className="feed-post-author">
+                    <div className="feed-post-avatar">
+                      {(post.author_email || 'T').charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <strong>{post.author_email || 'Tenant Owner'}</strong>
+                      <p className="feed-post-meta">
+                        {new Date(post.created_at).toLocaleString()} · {post.type}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="feed-post-chip">{post.type}</span>
                 </div>
-                <p className="form-hint" style={{ marginTop: 0 }}>
-                  Posted by {post.author_email || 'Tenant Owner'} · {post.type}
-                </p>
-                {post.body && <p style={{ marginTop: '0.5rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>{post.body}</p>}
-                {post.media_url && (
-                  <p className="form-hint">
-                    Media:{' '}
-                    <a href={post.media_url} target="_blank" rel="noreferrer">
-                      Open resource
-                    </a>
-                  </p>
-                )}
 
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                {post.title && <h3 className="feed-post-title">{post.title}</h3>}
+                {post.body && <p className="feed-post-body">{post.body}</p>}
+                {renderMedia(post)}
+
+                <div className="feed-post-stats">
+                  <span>{post.like_count} likes</span>
+                  <span>{post.comment_count} comments</span>
+                </div>
+
+                <div className="feed-post-actions">
                   <button
                     type="button"
-                    className="login-btn"
-                    style={{ width: 'auto', padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
+                    className="feed-action-btn"
                     disabled={busyLikePostId === post.id}
                     onClick={() => void toggleLike(post)}
                   >
-                    {post.viewer_has_liked ? 'Unlike' : 'Like'} ({post.like_count})
+                    {post.viewer_has_liked ? 'Unlike' : 'Like'}
                   </button>
                   <button
                     type="button"
-                    className="login-btn"
-                    style={{ width: 'auto', padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
+                    className="feed-action-btn"
                     onClick={() => void openComments(post.id)}
                   >
-                    Comments ({post.comment_count})
+                    Comments
                   </button>
                 </div>
 
                 {commentsOpen && (
-                  <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.75rem' }}>
+                  <div className="feed-comments-panel">
                     {comments.length === 0 ? (
                       <p className="form-hint">No comments yet.</p>
                     ) : (
-                      <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <div className="feed-comments-list">
                         {comments.map((c) => (
-                          <div key={c.id} className="card" style={{ padding: '0.7rem' }}>
+                          <div key={c.id} className="feed-comment-item">
                             <p style={{ margin: 0, fontSize: '0.85rem' }}>{c.body}</p>
                             <p className="text-muted" style={{ margin: '0.35rem 0 0', fontSize: '0.75rem' }}>
                               {c.user_email || 'Member'} · {new Date(c.created_at).toLocaleString()}
@@ -192,7 +221,7 @@ export default function ContentFeed() {
                         ))}
                       </div>
                     )}
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div className="feed-comment-compose">
                       <input
                         value={commentDraftByPost[post.id] || ''}
                         onChange={(e) => setCommentDraftByPost((prev) => ({ ...prev, [post.id]: e.target.value }))}
@@ -200,8 +229,7 @@ export default function ContentFeed() {
                       />
                       <button
                         type="button"
-                        className="login-btn"
-                        style={{ width: 'auto', padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
+                        className="feed-action-btn"
                         disabled={busyCommentPostId === post.id}
                         onClick={() => void submitComment(post.id)}
                       >

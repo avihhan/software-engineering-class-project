@@ -750,6 +750,147 @@ body {
   margin-top: 0.25rem;
 }
 
+.feed-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.feed-post {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.feed-post-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.95rem 1rem 0.75rem;
+}
+
+.feed-post-author {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.feed-post-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(108, 99, 255, 0.2);
+  border: 1px solid rgba(108, 99, 255, 0.35);
+  color: #c4b5fd;
+  display: grid;
+  place-items: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.feed-post-meta {
+  margin: 0.1rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+
+.feed-post-chip {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #c4b5fd;
+  background: rgba(108, 99, 255, 0.15);
+  border: 1px solid rgba(108, 99, 255, 0.3);
+  border-radius: 999px;
+  padding: 0.22rem 0.5rem;
+}
+
+.feed-post-title {
+  margin: 0;
+  padding: 0 1rem;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.feed-post-body {
+  margin: 0.5rem 0 0;
+  padding: 0 1rem;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  color: #e2e8f0;
+}
+
+.feed-post-media-wrap {
+  margin-top: 0.75rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.feed-post-media {
+  display: block;
+  width: 100%;
+  max-height: 380px;
+  object-fit: cover;
+}
+
+.feed-post-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin: 0.8rem 1rem 0;
+}
+
+.feed-post-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin: 0.6rem 1rem 0.9rem;
+}
+
+.feed-action-btn {
+  width: 100%;
+  padding: 0.52rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.feed-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.feed-comments-panel {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.8rem 1rem 1rem;
+}
+
+.feed-comments-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.feed-comment-item {
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.feed-comment-compose {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .workout-prompt-card {
   border: 1px solid rgba(108, 99, 255, 0.28);
   background: linear-gradient(135deg, rgba(108, 99, 255, 0.12), rgba(59, 130, 246, 0.08));

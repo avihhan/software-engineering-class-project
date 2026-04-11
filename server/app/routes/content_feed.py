@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import Any
 from uuid import uuid4
 
@@ -92,6 +93,47 @@ def _resolve_public_url(bucket_api: Any, path: str) -> str | None:
     return None
 
 
+def _resolve_storage_media_url(sb, bucket_name: str, row: dict[str, Any]) -> str | None:
+    raw_url = (row.get("media_url") or "").strip()
+    media_path = (row.get("media_path") or "").strip()
+    if raw_url:
+        parsed = urlparse(raw_url)
+        if parsed.scheme in {"http", "https"}:
+            return raw_url
+        if raw_url.startswith("/"):
+            base = current_app.config.get("SUPABASE_URL", "").rstrip("/")
+            if base:
+                return f"{base}{raw_url}"
+        if not media_path:
+            media_path = raw_url
+
+    if not media_path:
+        return raw_url or None
+
+    try:
+        bucket_api = sb.storage.from_(bucket_name)
+        signer = getattr(bucket_api, "create_signed_url", None)
+        if callable(signer):
+            signed_payload = signer(media_path, 60 * 60 * 24)
+            if isinstance(signed_payload, str):
+                return signed_payload
+            if isinstance(signed_payload, dict):
+                signed = signed_payload.get("signedURL") or signed_payload.get("signed_url")
+                if isinstance(signed, str):
+                    if signed.startswith("/"):
+                        base = current_app.config.get("SUPABASE_URL", "").rstrip("/")
+                        if base:
+                            return f"{base}/storage/v1{signed}"
+                    return signed
+        public_url = _resolve_public_url(bucket_api, media_path)
+        if public_url:
+            return public_url
+    except Exception:
+        return raw_url or None
+
+    return raw_url or None
+
+
 def _resolve_signed_upload(bucket_api: Any, path: str) -> dict[str, Any]:
     signer = getattr(bucket_api, "create_signed_upload_url", None)
     if callable(signer):
@@ -111,6 +153,7 @@ def list_feed_posts():
         request.args.get("include_unpublished"), default=False
     )
     is_owner_view = g.role in {"owner", "super_admin"}
+    bucket_name = os.environ.get("SUPABASE_CONTENT_BUCKET", "").strip() or DEFAULT_BUCKET
 
     query = (
         sb.table("tenant_feed_posts")
@@ -179,9 +222,11 @@ def list_feed_posts():
     for row in rows:
         pid = int(row["id"])
         author_id = int(row["author_user_id"])
+        media_url = _resolve_storage_media_url(sb, bucket_name, row)
         posts.append(
             {
                 **row,
+                "media_url": media_url,
                 "author_email": author_email_by_id.get(author_id),
                 "like_count": like_count_by_post.get(pid, 0),
                 "comment_count": comment_count_by_post.get(pid, 0),

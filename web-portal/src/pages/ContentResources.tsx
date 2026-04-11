@@ -10,6 +10,13 @@ import {
 
 type PostType = 'video' | 'article' | 'post' | 'resource';
 
+function isVideoPost(post: FeedPost): boolean {
+  const mime = (post.media_mime || '').toLowerCase();
+  if (mime.startsWith('video/')) return true;
+  const url = (post.media_url || '').toLowerCase();
+  return /\.(mp4|webm|mov|m4v|avi)(\?|$)/.test(url) || post.type === 'video';
+}
+
 export default function ContentResources() {
   const { accessToken } = useAuth();
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -137,6 +144,25 @@ export default function ContentResources() {
     }
   }
 
+  function renderPostMedia(post: FeedPost) {
+    if (!post.media_url) return null;
+    if (isVideoPost(post)) {
+      return (
+        <div className="owner-feed-media-wrap">
+          <video className="owner-feed-media" controls preload="metadata">
+            <source src={post.media_url} type={post.media_mime || undefined} />
+            Your browser does not support video playback.
+          </video>
+        </div>
+      );
+    }
+    return (
+      <div className="owner-feed-media-wrap">
+        <img className="owner-feed-media" src={post.media_url} alt={post.title || 'Post media'} loading="lazy" />
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -235,37 +261,32 @@ export default function ContentResources() {
         ) : posts.length === 0 ? (
           <div className="empty-state"><p>No posts yet.</p></div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Engagement</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {posts.map((post) => (
-                <tr key={post.id}>
-                  <td>{post.type}</td>
-                  <td>
-                    <div>{post.title || 'Untitled'}</div>
-                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                      {new Date(post.created_at).toLocaleString()}
-                    </div>
-                  </td>
-                  <td>{post.is_published ? 'Published' : 'Draft'}</td>
-                  <td>{post.like_count} likes · {post.comment_count} comments</td>
-                  <td>
-                    <button className="delete-btn" onClick={() => void handleDelete(post.id)}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="owner-feed-list">
+            {posts.map((post) => (
+              <article key={post.id} className="owner-feed-card">
+                <header className="owner-feed-header">
+                  <div>
+                    <strong>{post.author_email || 'Tenant Owner'}</strong>
+                    <p className="dashboard-subtitle" style={{ marginTop: '0.2rem' }}>
+                      {new Date(post.created_at).toLocaleString()} · {post.type} · {post.is_published ? 'Published' : 'Draft'}
+                    </p>
+                  </div>
+                  <button className="delete-btn" onClick={() => void handleDelete(post.id)}>
+                    Delete
+                  </button>
+                </header>
+
+                {post.title && <h3 className="owner-feed-title">{post.title}</h3>}
+                {post.body && <p className="owner-feed-body">{post.body}</p>}
+                {renderPostMedia(post)}
+
+                <footer className="owner-feed-footer">
+                  <span>{post.like_count} likes</span>
+                  <span>{post.comment_count} comments</span>
+                </footer>
+              </article>
+            ))}
+          </div>
         )}
       </section>
     </div>
