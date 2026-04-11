@@ -157,6 +157,8 @@ export default function BodyMetrics() {
       weight: m.weight,
       bf: m.body_fat_percentage,
     }));
+  const weightChartData = chartData.filter((p) => p.weight != null);
+  const latestMetric = metrics[0] ?? null;
 
   function formatHeight(metric: Metric) {
     if (metric.height_feet != null || metric.height_inches != null) {
@@ -173,7 +175,7 @@ export default function BodyMetrics() {
       <header className="page-header page-header-row">
         <h1>Body Metrics</h1>
         <button className="action-btn" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancel' : '+ Log'}
+          {showForm ? 'Cancel' : '+ Log Weight & Height'}
         </button>
       </header>
 
@@ -182,6 +184,22 @@ export default function BodyMetrics() {
           <p className="empty-text" style={{ color: '#fca5a5' }}>{error}</p>
         </section>
       )}
+
+      <section className="section">
+        <h2>Current Body Measurements</h2>
+        <div className="card-grid">
+          <div className="card">
+            <span className="card-label">Current Weight</span>
+            <span className="card-value">
+              {latestMetric?.weight != null ? `${latestMetric.weight} lbs` : '--'}
+            </span>
+          </div>
+          <div className="card">
+            <span className="card-label">Current Height</span>
+            <span className="card-value">{latestMetric ? formatHeight(latestMetric) : '--'}</span>
+          </div>
+        </div>
+      </section>
 
       <section className="section">
         <div className="page-header-row" style={{ marginBottom: '0.75rem' }}>
@@ -312,11 +330,11 @@ export default function BodyMetrics() {
         </section>
       )}
 
-      {chartData.length > 1 && (
+      {weightChartData.length > 1 && (
         <section className="section">
-          <h2>Weight Trend</h2>
+          <h2>Weight Tracking Graph</h2>
           <Suspense fallback={<div className="skeleton-chart" />}>
-            <BodyMetricsChart data={chartData} />
+            <BodyMetricsChart data={weightChartData} />
           </Suspense>
         </section>
       )}
