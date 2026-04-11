@@ -2,9 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  apiAddFavoriteItem,
   apiAddWorkoutExercise,
   apiCreateWorkout,
+  apiGetFavoriteIds,
   apiGetWorkoutDetail,
+  apiRemoveFavoriteItem,
   apiFetchJson,
   getApiCache,
   invalidateApiCache,
@@ -28,6 +31,8 @@ export default function Workouts() {
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
   const [saving, setSaving] = useState(false);
+  const [favoriteWorkoutIds, setFavoriteWorkoutIds] = useState<Set<number>>(new Set());
+  const [busyFavoriteWorkoutId, setBusyFavoriteWorkoutId] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   function parseWeightToOneDecimal(raw: string): number | undefined {
@@ -66,6 +71,12 @@ export default function Workouts() {
   }
 
   useEffect(fetchWorkouts, [accessToken]);
+  useEffect(() => {
+    if (!accessToken) return;
+    apiGetFavoriteIds(accessToken)
+      .then((rows) => setFavoriteWorkoutIds(new Set(rows.workout ?? [])))
+      .catch(() => {});
+  }, [accessToken]);
   useEffect(() => {
     const qs = new URLSearchParams(location.search);
     if (qs.get('logToday') === '1') {
@@ -146,6 +157,36 @@ export default function Workouts() {
       setError(err instanceof Error ? err.message : 'Unable to save workout');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleWorkoutFavorite(workoutId: number) {
+    if (!accessToken || busyFavoriteWorkoutId === workoutId) return;
+    setBusyFavoriteWorkoutId(workoutId);
+    const isFavorite = favoriteWorkoutIds.has(workoutId);
+    setFavoriteWorkoutIds((prev) => {
+      const next = new Set(prev);
+      if (isFavorite) next.delete(workoutId);
+      else next.add(workoutId);
+      return next;
+    });
+    try {
+      if (isFavorite) {
+        await apiRemoveFavoriteItem(accessToken, 'workout', workoutId);
+      } else {
+        await apiAddFavoriteItem(accessToken, 'workout', workoutId);
+      }
+      invalidateApiCache('/api/favorites', accessToken);
+    } catch (err) {
+      setFavoriteWorkoutIds((prev) => {
+        const next = new Set(prev);
+        if (isFavorite) next.add(workoutId);
+        else next.delete(workoutId);
+        return next;
+      });
+      setError(err instanceof Error ? err.message : 'Unable to update favorite');
+    } finally {
+      setBusyFavoriteWorkoutId(null);
     }
   }
 
@@ -233,7 +274,21 @@ export default function Workouts() {
             >
               <div className="workout-log-header">
                 <span className="card-label">{w.workout_date}</span>
-                <span className="text-muted">{isOpen ? 'Hide details' : 'View details'}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <button
+                    type="button"
+                    className="favorite-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggleWorkoutFavorite(w.id);
+                    }}
+                    disabled={busyFavoriteWorkoutId === w.id}
+                    aria-label={favoriteWorkoutIds.has(w.id) ? 'Unfavorite workout' : 'Favorite workout'}
+                  >
+                    {favoriteWorkoutIds.has(w.id) ? '♥' : '♡'}
+                  </button>
+                  <span className="text-muted">{isOpen ? 'Hide details' : 'View details'}</span>
+                </div>
               </div>
               {w.notes && <span className="card-note">{w.notes}</span>}
               {isOpen && (

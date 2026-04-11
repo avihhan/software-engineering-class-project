@@ -1,8 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
+  apiAddFavoriteItem,
   apiCreateNutritionLog,
+  apiGetFavoriteIds,
   apiGetNutritionLogs,
+  apiRemoveFavoriteItem,
   invalidateApiCache,
   type NutritionLogEntry,
   type NutritionTargets,
@@ -79,6 +82,8 @@ export default function Nutrition() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+  const [favoriteNutritionIds, setFavoriteNutritionIds] = useState<Set<number>>(new Set());
+  const [busyFavoriteNutritionId, setBusyFavoriteNutritionId] = useState<number | null>(null);
 
   function fetchLogs() {
     if (!accessToken) return;
@@ -93,6 +98,12 @@ export default function Nutrition() {
   }
 
   useEffect(fetchLogs, [accessToken]);
+  useEffect(() => {
+    if (!accessToken) return;
+    apiGetFavoriteIds(accessToken)
+      .then((rows) => setFavoriteNutritionIds(new Set(rows.nutrition ?? [])))
+      .catch(() => {});
+  }, [accessToken]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -127,6 +138,36 @@ export default function Nutrition() {
     setShowForm(false);
     invalidateApiCache('/api/nutrition', accessToken);
     fetchLogs();
+  }
+
+  async function toggleNutritionFavorite(logId: number) {
+    if (!accessToken || busyFavoriteNutritionId === logId) return;
+    setBusyFavoriteNutritionId(logId);
+    const isFavorite = favoriteNutritionIds.has(logId);
+    setFavoriteNutritionIds((prev) => {
+      const next = new Set(prev);
+      if (isFavorite) next.delete(logId);
+      else next.add(logId);
+      return next;
+    });
+    try {
+      if (isFavorite) {
+        await apiRemoveFavoriteItem(accessToken, 'nutrition', logId);
+      } else {
+        await apiAddFavoriteItem(accessToken, 'nutrition', logId);
+      }
+      invalidateApiCache('/api/favorites', accessToken);
+    } catch (err) {
+      setFavoriteNutritionIds((prev) => {
+        const next = new Set(prev);
+        if (isFavorite) next.add(logId);
+        else next.delete(logId);
+        return next;
+      });
+      setError(err instanceof Error ? err.message : 'Unable to update favorite');
+    } finally {
+      setBusyFavoriteNutritionId(null);
+    }
   }
 
   const todayLogs = logs.filter(
@@ -234,9 +275,23 @@ export default function Nutrition() {
               style={{ marginBottom: '0.6rem', cursor: 'pointer' }}
               onClick={() => setExpandedLogId((prev) => (prev === l.id ? null : l.id))}
             >
-              <div>
-                <span className="log-primary">{l.meal_type ?? 'Meal'}</span>
-                <span className="log-secondary">{new Date(l.logged_at).toLocaleString()}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.6rem' }}>
+                <div>
+                  <span className="log-primary">{l.meal_type ?? 'Meal'}</span>
+                  <span className="log-secondary">{new Date(l.logged_at).toLocaleString()}</span>
+                </div>
+                <button
+                  type="button"
+                  className="favorite-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void toggleNutritionFavorite(l.id);
+                  }}
+                  disabled={busyFavoriteNutritionId === l.id}
+                  aria-label={favoriteNutritionIds.has(l.id) ? 'Unfavorite meal' : 'Favorite meal'}
+                >
+                  {favoriteNutritionIds.has(l.id) ? '♥' : '♡'}
+                </button>
               </div>
               <p className="text-muted" style={{ marginBottom: 0 }}>{l.meal_items || 'No meal items provided'}</p>
               <span className="log-value">{l.calories ?? 0} kcal</span>

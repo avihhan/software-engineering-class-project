@@ -940,6 +940,26 @@ body {
   white-space: nowrap;
 }
 
+.favorite-btn {
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fda4af;
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.favorite-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .nutrition-log-card {
   transition: border-color 0.2s ease, transform 0.1s ease;
 }

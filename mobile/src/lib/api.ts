@@ -220,6 +220,16 @@ export interface NutritionLogsResponse {
   targets: NutritionTargets;
 }
 
+export type FavoriteItemType = 'workout' | 'nutrition';
+
+export interface FavoriteItem {
+  id: number;
+  item_type: FavoriteItemType;
+  item_id: number;
+  created_at: string;
+  item: WorkoutLog | NutritionLogEntry;
+}
+
 export interface BodyMetricsQuestionnaire {
   sex: 'male' | 'female';
   age_years: number;
@@ -482,6 +492,60 @@ export async function apiUpdateBodyMetricsQuestionnaire(
     throw new Error(body.error || 'Unable to update questionnaire');
   }
   return body as BodyMetricsQuestionnaireResponse;
+}
+
+export async function apiGetFavoriteIds(
+  accessToken: string,
+): Promise<{ workout: number[]; nutrition: number[] }> {
+  const res = await apiFetch('/api/favorites/items/ids', accessToken);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Unable to load favorite ids');
+  }
+  return {
+    workout: (body.workout ?? []) as number[],
+    nutrition: (body.nutrition ?? []) as number[],
+  };
+}
+
+export async function apiGetFavoriteItems(
+  accessToken: string,
+): Promise<FavoriteItem[]> {
+  const res = await apiFetch('/api/favorites/items', accessToken);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Unable to load favorites');
+  }
+  return (body.favorites ?? []) as FavoriteItem[];
+}
+
+export async function apiAddFavoriteItem(
+  accessToken: string,
+  itemType: FavoriteItemType,
+  itemId: number,
+): Promise<void> {
+  const res = await apiFetch('/api/favorites/items', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ item_type: itemType, item_id: itemId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Unable to add favorite');
+  }
+}
+
+export async function apiRemoveFavoriteItem(
+  accessToken: string,
+  itemType: FavoriteItemType,
+  itemId: number,
+): Promise<void> {
+  const res = await apiFetch(`/api/favorites/items/${itemType}/${itemId}`, accessToken, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Unable to remove favorite');
+  }
 }
 
 const TOKEN_KEY = 'aurafit_m_access_token';

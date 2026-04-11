@@ -16,6 +16,7 @@ const Calendar = lazy(() => import('./pages/Calendar'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Billing = lazy(() => import('./pages/Billing'));
 const ContentFeed = lazy(() => import('./pages/ContentFeed'));
+const Favorites = lazy(() => import('./pages/Favorites'));
 
 function RouteFallback() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
               <Route path="calendar" element={<Calendar />} />
               <Route path="notifications" element={<Notifications />} />
               <Route path="content" element={<ContentFeed />} />
+              <Route path="favorites" element={<Favorites />} />
               <Route path="profile" element={<Profile />} />
             </Route>
 
